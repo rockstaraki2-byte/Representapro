@@ -125,6 +125,8 @@ export default function App() {
   const [activePedidoToEdit, setActivePedidoToEdit] = useState<Pedido | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [showRulesGuide, setShowRulesGuide] = useState<boolean>(false);
+  const [hasPermissionError, setHasPermissionError] = useState<boolean>(false);
 
   // --- LocalStorage Synchronization ---
   useEffect(() => {
@@ -197,9 +199,15 @@ export default function App() {
         if (empData.length > 0) setEmpresas(empData);
         if (usrData.length > 0) setUsuarios(usrData);
         if (metaData) setMeta(metaData);
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error synchronizing with Firestore:', err);
-        setErrorMessage('Falha ao sincronizar dados com o Firestore. Rodando em modo local offline.');
+        const errMsg = err?.message || String(err);
+        if (errMsg.includes('permissions') || errMsg.includes('insufficient') || errMsg.includes('denied')) {
+          setHasPermissionError(true);
+          setErrorMessage('Erro de Permissões no Firestore (representapro-b84c3). Clique em "Como Resolver" para configurar as regras.');
+        } else {
+          setErrorMessage('Falha ao sincronizar dados com o Firestore. Rodando em modo local offline.');
+        }
       } finally {
         setLoading(false);
       }
@@ -412,7 +420,13 @@ export default function App() {
                   const docId = await testarConexaoFirebase(currentUser?.email);
                   alert(`Sucesso! Conectado ao Firestore "representapro-b84c3".\nDocumento criado na coleção "teste_conexao" com o ID: ${docId}`);
                 } catch (err: any) {
-                  alert(`Erro ao conectar ao Firestore: ${err.message}`);
+                  const errMsg = err?.message || String(err);
+                  if (errMsg.includes('permissions') || errMsg.includes('insufficient') || errMsg.includes('denied')) {
+                    setHasPermissionError(true);
+                    setShowRulesGuide(true);
+                  } else {
+                    alert(`Erro ao conectar ao Firestore: ${errMsg}`);
+                  }
                 }
               }}
               className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shadow-sm shadow-emerald-200"
@@ -437,9 +451,19 @@ export default function App() {
 
       {/* Alerta de erro da API do Gemini */}
       {errorMessage && (
-        <div className="bg-amber-50 border-b border-amber-200 text-amber-800 py-2.5 px-6 text-xs flex items-center justify-center gap-2 font-medium sticky top-[73px] z-30 shadow-sm animate-fade-in">
-          <AlertCircle className="w-4 h-4 text-amber-600" />
-          <span>{errorMessage}</span>
+        <div className="bg-amber-50 border-b border-amber-200 text-amber-800 py-3 px-6 text-xs flex flex-wrap items-center justify-center gap-3 font-medium sticky top-[73px] z-30 shadow-sm animate-fade-in">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+          {hasPermissionError && (
+            <button
+              onClick={() => setShowRulesGuide(true)}
+              className="bg-amber-150 hover:bg-amber-200 text-amber-900 border border-amber-300 px-3 py-1 rounded-xl font-bold text-[11px] transition-all cursor-pointer flex items-center gap-1 shrink-0 shadow-xs"
+            >
+              <span>Como Resolver (Passo a Passo)</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -706,6 +730,105 @@ export default function App() {
         </button>
 
       </div>
+
+      {/* Modal Guia de Regras do Firestore */}
+      <AnimatePresence>
+        {showRulesGuide && (
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-slate-200 text-slate-800 font-sans my-8"
+            >
+              <div className="flex justify-between items-start border-b border-slate-100 pb-4 mb-4">
+                <div>
+                  <h3 className="font-serif font-extrabold text-base text-slate-900 leading-tight">Como Corrigir as Permissões do Firestore</h3>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Siga os passos abaixo para liberar o acesso ao banco <strong>representapro-b84c3</strong></p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowRulesGuide(false)}
+                  className="text-slate-400 hover:text-slate-600 transition-colors p-1 hover:bg-slate-50 rounded-lg cursor-pointer"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-4 text-xs text-slate-600 leading-relaxed max-h-[350px] overflow-y-auto pr-2">
+                <div className="flex gap-3">
+                  <span className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-[10px] shrink-0 mt-0.5">1</span>
+                  <div>
+                    <strong className="text-slate-900 font-bold block mb-0.5">Acesse o Console do Firebase</strong>
+                    <p>Clique no link para abrir o console em outra aba: <a href="https://console.firebase.google.com/" target="_blank" rel="noreferrer" className="text-emerald-600 font-bold underline hover:text-emerald-700">console.firebase.google.com</a> e selecione o seu projeto <strong>representapro-b84c3</strong>.</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <span className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-[10px] shrink-0 mt-0.5">2</span>
+                  <div>
+                    <strong className="text-slate-900 font-bold block mb-0.5">Navegue até o Firestore Database</strong>
+                    <p>No menu lateral esquerdo, clique em <strong>Firestore Database</strong> (dentro do menu "Build" ou "Criação").</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <span className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-[10px] shrink-0 mt-0.5">3</span>
+                  <div>
+                    <strong className="text-slate-900 font-bold block mb-0.5">Selecione a aba "Regras" (Rules)</strong>
+                    <p>Na parte superior da tela do Firestore, clique na segunda aba chamada <strong>Regras</strong> (ao lado de "Dados").</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <span className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-[10px] shrink-0 mt-0.5">4</span>
+                  <div>
+                    <strong className="text-slate-900 font-bold block mb-0.5">Substitua o código de regras pelo seguinte:</strong>
+                    <pre className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-[10px] font-mono text-slate-700 mt-1 overflow-x-auto">
+{`rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}`}
+                    </pre>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <span className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-[10px] shrink-0 mt-0.5">5</span>
+                  <div>
+                    <strong className="text-slate-900 font-bold block mb-0.5">Clique no botão "Publicar" (Publish)</strong>
+                    <p>Clique no botão azul <strong>Publicar</strong> no canto superior direito para aplicar as regras modificadas.</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pb-2">
+                  <span className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-[10px] shrink-0 mt-0.5">6</span>
+                  <div>
+                    <strong className="text-slate-900 font-bold block mb-0.5">Recarregue este aplicativo</strong>
+                    <p>Após a publicação (que demora cerca de 10 segundos para propagar), <strong>recarregue esta página</strong> do RepresentaPRO. O erro sumirá e o banco será sincronizado com sucesso!</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-slate-100 flex justify-end gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setShowRulesGuide(false)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-all shadow-md cursor-pointer"
+                >
+                  Entendi, vou configurar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

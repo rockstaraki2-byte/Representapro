@@ -313,33 +313,6 @@ export default function LoginScreen({ usuarios, empresas, onLoginSuccess }: Logi
               )}
             </AnimatePresence>
           </div>
-
-          {/* Sandbox Helper/Credentials Accordion */}
-          <div className="mt-6 pt-6 border-t border-slate-800 space-y-2 text-[11px]">
-            <div className="flex items-center gap-1 text-slate-400 font-bold">
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              <span>Dicas de Login (Simulador Sandbox):</span>
-            </div>
-            
-            <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800/80 text-[10px] space-y-2 text-slate-400 leading-normal">
-              <div>
-                <strong className="text-amber-500 block">Administradores (Login Google Único):</strong>
-                <ul className="list-disc pl-4 space-y-0.5 mt-0.5 text-slate-300 font-mono">
-                  <li>andre@planalto.rep.br <span className="text-[9px] text-slate-500">(Planalto)</span></li>
-                  <li>daniel@vanguardvendas.com.br <span className="text-[9px] text-slate-500">(Vanguard)</span></li>
-                </ul>
-              </div>
-              
-              <div>
-                <strong className="text-blue-400 block">Vendedores / Representantes (Senha local):</strong>
-                <ul className="list-disc pl-4 space-y-0.5 mt-0.5 text-slate-300 font-mono">
-                  <li>bruno@planalto.rep.br <span className="text-white">(senha: 123456)</span></li>
-                  <li>carla@planalto.rep.br <span className="text-white">(senha: 123456)</span></li>
-                  <li>eduardo@vanguardvendas.com.br <span className="text-white">(senha: 123456)</span></li>
-                </ul>
-              </div>
-            </div>
-          </div>
         </motion.div>
       </div>
 
