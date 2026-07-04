@@ -618,6 +618,7 @@ export default function App() {
                   pedidos={filteredPedidos}
                   clientes={filteredClientes}
                   representadas={filteredRepresentadas}
+                  produtos={filteredProdutos}
                   activePedidoToEdit={activePedidoToEdit}
                   onClearActiveEdit={() => setActivePedidoToEdit(null)}
                   onAdd={handleAddPedido}

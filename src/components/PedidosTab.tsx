@@ -1,14 +1,100 @@
 import React, { useState, useEffect } from 'react';
-import { Pedido, Cliente, Representada, OrderItem, PedidoStatus } from '../types';
+import { Pedido, Cliente, Representada, OrderItem, PedidoStatus, Produto } from '../types';
 import { formatarMoeda, formatarData } from '../utils';
-import { Plus, Trash2, Edit3, Eye, FileText, Check, Percent, AlertCircle, ShoppingCart, Mail, Send, Printer, Loader2, Download, MessageCircle } from 'lucide-react';
+import { Plus, Trash2, Edit3, Eye, FileText, Check, Percent, AlertCircle, ShoppingCart, Mail, Send, Printer, Loader2, Download, MessageCircle, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { gerarPedidoPDF, gerarResumoMensalPDF } from '../lib/pdfGenerator';
+
+interface SearchableSelectProps {
+  options: { id: string; label: string; sublabel?: string }[];
+  value: string;
+  onChange: (id: string) => void;
+  placeholder: string;
+  disabled?: boolean;
+}
+
+function SearchableSelect({
+  options,
+  value,
+  onChange,
+  placeholder,
+  disabled = false
+}: SearchableSelectProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  
+  const selectedOption = options.find(o => o.id === value);
+  
+  useEffect(() => {
+    if (!isOpen) {
+      setSearch(selectedOption ? selectedOption.label : '');
+    }
+  }, [isOpen, selectedOption]);
+
+  const filtered = options.filter(o => 
+    o.label.toLowerCase().includes(search.toLowerCase()) ||
+    (o.sublabel && o.sublabel.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  return (
+    <div className="relative w-full">
+      <div className="relative flex items-center">
+        <input
+          type="text"
+          placeholder={placeholder}
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            if (!isOpen) setIsOpen(true);
+          }}
+          onFocus={() => {
+            if (!disabled) setIsOpen(true);
+          }}
+          disabled={disabled}
+          className={`w-full bg-slate-50 border border-slate-200 rounded-lg pl-3 pr-8 py-2 text-xs focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-800 font-bold ${
+            disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-text'
+          }`}
+        />
+        <div className="absolute right-2.5 pointer-events-none text-slate-400">
+          <ChevronDown className="w-3.5 h-3.5" />
+        </div>
+      </div>
+
+      {isOpen && !disabled && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+          <ul className="absolute left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg z-50 divide-y divide-slate-100">
+            {filtered.length === 0 ? (
+              <li className="p-3 text-xs text-slate-400 italic text-center">Nenhum resultado encontrado</li>
+            ) : (
+              filtered.map(opt => (
+                <li
+                  key={opt.id}
+                  onClick={() => {
+                    onChange(opt.id);
+                    setIsOpen(false);
+                  }}
+                  className={`p-2.5 text-xs text-left cursor-pointer hover:bg-slate-50 transition-colors ${
+                    opt.id === value ? 'bg-slate-50 text-emerald-700 font-extrabold' : 'text-slate-700'
+                  }`}
+                >
+                  <div className="font-bold">{opt.label}</div>
+                  {opt.sublabel && <div className="text-[10px] text-slate-400 font-normal mt-0.5">{opt.sublabel}</div>}
+                </li>
+              ))
+            )}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
 
 interface PedidosTabProps {
   pedidos: Pedido[];
   clientes: Cliente[];
   representadas: Representada[];
+  produtos: Produto[];
   activePedidoToEdit: Pedido | null;
   onClearActiveEdit: () => void;
   onAdd: (pedido: Pedido) => void;
@@ -21,6 +107,7 @@ export default function PedidosTab({
   pedidos,
   clientes,
   representadas,
+  produtos,
   activePedidoToEdit,
   onClearActiveEdit,
   onAdd,
@@ -43,8 +130,10 @@ export default function PedidosTab({
   const [comissaoPercentual, setComissaoPercentual] = useState<number>(5);
   const [status, setStatus] = useState<PedidoStatus>('Pendente');
   const [observacoes, setObservacoes] = useState('');
+  const [condicoesPagamento, setCondicoesPagamento] = useState('');
 
   // Item form states
+  const [selectedProdutoId, setSelectedProdutoId] = useState('');
   const [itemDescricao, setItemDescricao] = useState('');
   const [itemQuantidade, setItemQuantidade] = useState<number>(1);
   const [itemPreco, setItemPreco] = useState<number>(0);
@@ -67,6 +156,34 @@ export default function PedidosTab({
       onClearActiveEdit(); // Clear parent trigger
     }
   }, [activePedidoToEdit]);
+
+  // Helper to auto generate order number in format: PEDIDO-XXXXX - NOME DO CLIENTE ABREVIADO - ANO (XXXX)
+  const handleAutoGenerateOrderNumber = () => {
+    const selectedCliente = clientes.find(c => c.id === clienteId);
+    const clientName = selectedCliente?.nomeFantasia || selectedCliente?.razaoSocial || '';
+    
+    const suffixes = ['ltda', 'me', 'epp', 'sa', 's/a', 'eireli', 'comercial', 'representacoes', 'industria', 'e', 'de', 'para', 'do', 'da'];
+    const words = clientName
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(w => w && !suffixes.includes(w));
+    
+    let abr = words.slice(0, 2).join(' ').toUpperCase();
+    if (!abr && clientName) abr = clientName.substring(0, 10).toUpperCase();
+    if (!abr) abr = 'CLIENTE';
+    
+    const randomNum = Math.floor(10000 + Math.random() * 90000);
+    const year = dataPedido ? dataPedido.split('-')[0] : new Date().getFullYear();
+    
+    setNumeroPedido(`PEDIDO-${randomNum} - ${abr} - ${year}`);
+  };
+
+  // Automatically trigger code generation for new orders if client is selected and number is empty
+  useEffect(() => {
+    if (!editingId && clienteId && (numeroPedido === '' || numeroPedido.startsWith('PEDIDO-'))) {
+      handleAutoGenerateOrderNumber();
+    }
+  }, [clienteId, dataPedido, editingId]);
 
   // Sync default commission % when represented company is selected (only when creating)
   const handleRepresentadaChange = (id: string) => {
@@ -103,6 +220,7 @@ export default function PedidosTab({
     };
 
     setItens([...itens, novoItem]);
+    setSelectedProdutoId('');
     setItemDescricao('');
     setItemQuantidade(1);
     setItemPreco(0);
@@ -122,6 +240,8 @@ export default function PedidosTab({
     setComissaoPercentual(5);
     setStatus('Pendente');
     setObservacoes('');
+    setCondicoesPagamento('');
+    setSelectedProdutoId('');
     setValidationError(null);
     setIsFormOpen(false);
   };
@@ -136,6 +256,7 @@ export default function PedidosTab({
     setComissaoPercentual(p.comissaoPercentual);
     setStatus(p.status);
     setObservacoes(p.observacoes || '');
+    setCondicoesPagamento(p.condicoesPagamento || '');
     setValidationError(null);
     setIsFormOpen(true);
   };
@@ -188,7 +309,8 @@ export default function PedidosTab({
       });
 
       if (!response.ok) {
-        throw new Error('Falha ao enviar e-mail através do servidor.');
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || 'Falha ao enviar e-mail através do servidor.');
       }
 
       setEmailSuccess(true);
@@ -198,11 +320,11 @@ export default function PedidosTab({
     } catch (err: any) {
       console.error('Erro ao enviar e-mail pelo servidor, usando fallback local:', err);
       
-      // Fallback para link mailto: local caso esteja rodando sem backend (como no Vercel estático)
+      // Fallback para link mailto: local caso esteja rodando sem backend ou credenciais não estejam configuradas
       const mailtoUrl = `mailto:${encodeURIComponent(emailRecipient)}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
       const confirmMailto = confirm(
-        'O servidor de e-mail do sistema não pôde ser alcançado neste ambiente (ex: Vercel estático).\n\n' +
-        'Deseja abrir o seu aplicativo de e-mail local (Outlook, Gmail, Apple Mail, etc.) para enviar o pedido diretamente do seu computador/celular?'
+        `${err.message || 'O servidor de e-mail do sistema não pôde ser alcançado.'}\n\n` +
+        'Deseja abrir o seu aplicativo de e-mail local (Outlook, Gmail, Apple Mail, etc.) para enviar o pedido diretamente?'
       );
       if (confirmMailto) {
         window.open(mailtoUrl, '_blank');
@@ -248,6 +370,7 @@ export default function PedidosTab({
       valorComissao: valorComissaoCalculado,
       status,
       observacoes: observacoes.trim() || undefined,
+      condicoesPagamento: condicoesPagamento.trim() || undefined,
     };
 
     if (editingId) {
@@ -276,6 +399,7 @@ export default function PedidosTab({
 
   const totalCalculadoForm = itens.reduce((sum, item) => sum + item.totalItem, 0);
   const valorComissaoForm = totalCalculadoForm * (comissaoPercentual / 100);
+  const produtosFiltradosRepresentada = produtos ? produtos.filter(p => p.representadaId === representadaId && p.ativo) : [];
 
   return (
     <div className="space-y-6">
@@ -341,13 +465,23 @@ export default function PedidosTab({
                       
                       {/* Código/Nº do Pedido */}
                       <div className="space-y-1">
-                        <label className="block text-xs font-mono uppercase text-slate-500">Número do Pedido <span className="text-red-500">*</span></label>
+                        <div className="flex justify-between items-center">
+                          <label className="block text-xs font-mono uppercase text-slate-500">Número do Pedido <span className="text-red-500">*</span></label>
+                          <button
+                            type="button"
+                            onClick={handleAutoGenerateOrderNumber}
+                            className="text-[10px] text-emerald-600 hover:text-emerald-700 hover:underline font-bold cursor-pointer"
+                            title="Gerar código automaticamente com base no cliente e ano"
+                          >
+                            ⚡ Gerar Automático
+                          </button>
+                        </div>
                         <input 
                           type="text"
-                          placeholder="Ex: 20455 ou 1002-A"
+                          placeholder="PEDIDO-XXXXX - CLIENTE - ANO"
                           value={numeroPedido}
                           onChange={(e) => setNumeroPedido(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-xs focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-800 font-bold"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-xs focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-800 font-bold font-mono"
                         />
                       </div>
 
@@ -365,31 +499,31 @@ export default function PedidosTab({
                       {/* Cliente */}
                       <div className="space-y-1">
                         <label className="block text-xs font-mono uppercase text-slate-500">Cliente (Comprador) <span className="text-red-500">*</span></label>
-                        <select 
+                        <SearchableSelect
+                          options={clientes.map(c => ({
+                            id: c.id,
+                            label: c.nomeFantasia,
+                            sublabel: `CNPJ: ${c.cnpj} | ${c.cidade}-${c.uf}`
+                          }))}
                           value={clienteId}
-                          onChange={(e) => setClienteId(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-xs focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-800 cursor-pointer"
-                        >
-                          <option value="">-- Selecione o Cliente --</option>
-                          {clientes.map(c => (
-                            <option key={c.id} value={c.id}>{c.nomeFantasia} ({c.cidade}-{c.uf})</option>
-                          ))}
-                        </select>
+                          onChange={(id) => setClienteId(id)}
+                          placeholder="Buscar cliente por nome ou CNPJ..."
+                        />
                       </div>
 
                       {/* Representada */}
                       <div className="space-y-1">
                         <label className="block text-xs font-mono uppercase text-slate-500">Representada (Fábrica) <span className="text-red-500">*</span></label>
-                        <select 
+                        <SearchableSelect
+                          options={representadas.map(r => ({
+                            id: r.id,
+                            label: r.nomeFantasia,
+                            sublabel: `CNPJ: ${r.cnpj} | ${r.comissaoPadrao}% comissão padrão`
+                          }))}
                           value={representadaId}
-                          onChange={(e) => handleRepresentadaChange(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-xs focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-800 cursor-pointer"
-                        >
-                          <option value="">-- Selecione a Representada --</option>
-                          {representadas.map(r => (
-                            <option key={r.id} value={r.id}>{r.nomeFantasia} ({r.comissaoPadrao}% comissão padrão)</option>
-                          ))}
-                        </select>
+                          onChange={(id) => handleRepresentadaChange(id)}
+                          placeholder="Buscar representada por nome ou CNPJ..."
+                        />
                       </div>
 
                       {/* Porcentagem Comissão */}
@@ -428,12 +562,24 @@ export default function PedidosTab({
 
                     </div>
 
+                    {/* Condições de Pagamento */}
+                    <div className="space-y-1">
+                      <label className="block text-xs font-mono uppercase text-slate-500">Condições de Pagamento</label>
+                      <input 
+                        type="text"
+                        placeholder="Ex: 30/60/90 dias, Boleto Bancário, À Vista"
+                        value={condicoesPagamento}
+                        onChange={(e) => setCondicoesPagamento(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-xs focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-800 font-medium"
+                      />
+                    </div>
+
                     {/* Observações */}
                     <div className="space-y-1">
-                      <label className="block text-xs font-mono uppercase text-slate-500">Observações de Faturamento / Condições de Pagamento</label>
+                      <label className="block text-xs font-mono uppercase text-slate-500">Observações de Faturamento</label>
                       <textarea 
                         rows={2}
-                        placeholder="Ex: Faturar para 30/60 dias. Enviar via transportadora indicada."
+                        placeholder="Ex: Enviar via transportadora indicada pelo cliente."
                         value={observacoes}
                         onChange={(e) => setObservacoes(e.target.value)}
                         className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-800 resize-none leading-relaxed"
@@ -495,10 +641,32 @@ export default function PedidosTab({
                       
                       <form onSubmit={handleAddItem} className="space-y-3">
                         <div className="space-y-1">
-                          <label className="block text-[10px] font-mono uppercase text-slate-500">Descrição do Produto</label>
+                          <label className="block text-[10px] font-mono uppercase text-slate-500">Selecionar Produto Cadastrado <span className="text-red-500">*</span></label>
+                          <SearchableSelect
+                            options={produtosFiltradosRepresentada.map(p => ({
+                              id: p.id,
+                              label: p.nome,
+                              sublabel: `Cód: ${p.codigo} | Sugerido: ${formatarMoeda(p.precoVenda)} / ${p.unidade}`
+                            }))}
+                            value={selectedProdutoId}
+                            onChange={(id) => {
+                              setSelectedProdutoId(id);
+                              const prod = produtos.find(p => p.id === id);
+                              if (prod) {
+                                setItemDescricao(prod.nome);
+                                setItemPreco(prod.precoVenda);
+                              }
+                            }}
+                            placeholder={representadaId ? "Buscar produto..." : "Selecione representada primeiro"}
+                            disabled={!representadaId}
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="block text-[10px] font-mono uppercase text-slate-500">Descrição no Pedido</label>
                           <input 
                             type="text"
-                            placeholder="Ex: Bobina de Cabo Elétrico 100m"
+                            placeholder="Descrição final do item"
                             value={itemDescricao}
                             onChange={(e) => setItemDescricao(e.target.value)}
                             className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-emerald-600 text-slate-850"
@@ -602,7 +770,7 @@ export default function PedidosTab({
             <button
               onClick={() => {
                 const currentAnoMes = new Date().toISOString().slice(0, 7);
-                gerarResumoMensalPDF(pedidos, clientes, representadas, currentAnoMes);
+                gerarResumoMensalPDF(pedidos, clientes, representadas, currentAnoMes, empresaRepresentacao);
               }}
               className="bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
               title="Exportar Resumo de Pedidos do Mês em PDF"

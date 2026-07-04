@@ -5,6 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import nodemailer from 'nodemailer';
 
 dotenv.config();
 
@@ -140,19 +141,44 @@ async function startServer() {
         return res.status(400).json({ error: 'Os campos "to", "subject" e "body" são obrigatórios.' });
       }
 
+      const gmailUser = process.env.GMAIL_USER;
+      const gmailPass = process.env.GMAIL_APP_PASS;
+
       console.log(`========================================`);
       console.log(`[EMAIL SENDING SERVICE]`);
       console.log(`Destinatário: ${to}`);
       console.log(`Assunto: ${subject}`);
-      console.log(`Corpo do E-mail:\n${body}`);
+      console.log(`Gmail configurado: ${gmailUser ? 'Sim' : 'Não'}`);
       console.log(`========================================`);
 
-      // Here you would integrate nodemailer or a third-party email provider
-      // using credentials in process.env.SMTP_HOST, SMTP_USER, etc.
-      return res.json({ 
-        success: true, 
-        message: 'Cópia do pedido enviada por e-mail com sucesso!' 
-      });
+      if (gmailUser && gmailPass) {
+        const transporter = nodemailer.createTransport({
+          service: 'gmail',
+          auth: {
+            user: gmailUser,
+            pass: gmailPass,
+          },
+        });
+
+        const fromName = process.env.SMTP_FROM_NAME || 'RepresentaPRO';
+        await transporter.sendMail({
+          from: `"${fromName}" <${gmailUser}>`,
+          to,
+          subject,
+          text: body,
+        });
+
+        return res.json({ 
+          success: true, 
+          message: 'Cópia do pedido enviada por e-mail via Gmail com sucesso!' 
+        });
+      } else {
+        // No email credentials configured
+        return res.status(501).json({
+          error: 'Credenciais de e-mail (GMAIL_USER e GMAIL_APP_PASS) não configuradas no ambiente do servidor.',
+          needsFallback: true
+        });
+      }
     } catch (error: any) {
       console.error('Erro ao processar envio de e-mail:', error);
       return res.status(500).json({ error: error.message || 'Erro interno ao processar o e-mail.' });

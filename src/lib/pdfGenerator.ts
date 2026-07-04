@@ -149,7 +149,9 @@ export function gerarPedidoPDF(
     doc.line(15, y + 8, 195, y + 8);
 
     doc.setFontSize(8);
-    doc.text(item.descricao, 20, y + 5.5);
+    // Safe truncation to prevent overlapping with next columns
+    const displayDesc = item.descricao.length > 55 ? item.descricao.substring(0, 52) + '...' : item.descricao;
+    doc.text(displayDesc, 20, y + 5.5);
     doc.text(String(item.quantidade), 120, y + 5.5, { align: 'center' });
     doc.text(formatarMoeda(item.precoUnitario), 150, y + 5.5, { align: 'right' });
     doc.text(formatarMoeda(item.totalItem), 185, y + 5.5, { align: 'right' });
@@ -158,6 +160,18 @@ export function gerarPedidoPDF(
   });
 
   y += 6;
+
+  // Condições de Pagamento se houver
+  if (pedido.condicoesPagamento) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.text('Condições de Pagamento:', 15, y);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    const splitCond = doc.splitTextToSize(pedido.condicoesPagamento, 180);
+    doc.text(splitCond, 15, y + 4.5);
+    y += 6 + (splitCond.length * 4.5);
+  }
 
   // Observações se houver
   if (pedido.observacoes) {
@@ -206,7 +220,13 @@ export function gerarPedidoPDF(
 /**
  * Generates a monthly summary report in PDF.
  */
-export function gerarResumoMensalPDF(pedidos: Pedido[], clientes: Cliente[], representadas: Representada[], anoMes: string) {
+export function gerarResumoMensalPDF(
+  pedidos: Pedido[], 
+  clientes: Cliente[], 
+  representadas: Representada[], 
+  anoMes: string,
+  empresaRepresentacao?: any
+) {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -238,15 +258,37 @@ export function gerarResumoMensalPDF(pedidos: Pedido[], clientes: Cliente[], rep
   doc.setFillColor(darkColor[0], darkColor[1], darkColor[2]);
   doc.rect(0, 0, 210, 36, 'F');
 
+  let headerTextOffset = 15;
+  
+  // Render active company logo close to the title if available, otherwise a nice green badge
+  if (empresaRepresentacao?.logoUrl && empresaRepresentacao.logoUrl.startsWith('data:image/')) {
+    try {
+      doc.setFillColor(255, 255, 255);
+      doc.roundedRect(12, 5, 24, 24, 2, 2, 'F');
+      doc.addImage(empresaRepresentacao.logoUrl, 'PNG', 14, 7, 20, 20);
+      headerTextOffset = 42;
+    } catch (err) {
+      console.error('Erro ao adicionar logo no PDF do Relatório:', err);
+    }
+  } else {
+    doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.roundedRect(12, 8, 12, 12, 2, 2, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text('R', 18, 16.5, { align: 'center' });
+    headerTextOffset = 28;
+  }
+
   // Title
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.text('RELATÓRIO DE VENDAS E COMISSÕES', 15, 16);
-  doc.setFontSize(10);
+  doc.setFontSize(14);
+  doc.text('RELATÓRIO DE VENDAS E COMISSÕES', headerTextOffset, 15);
+  doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(148, 163, 184);
-  doc.text(`Período de Referência: ${mesNome} de ${ano}`, 15, 23);
+  doc.text(`Período de Referência: ${mesNome} de ${ano} | ${empresaRepresentacao?.nomeFantasia || 'RepresentaPRO'}`, headerTextOffset, 21);
 
   // Quick stats panels (4 cols)
   const colW = 42;
@@ -305,20 +347,20 @@ export function gerarResumoMensalPDF(pedidos: Pedido[], clientes: Cliente[], rep
 
   let y = 72;
 
-  // Table header
+  // Table header (Optimized Spacing to prevent any overlap)
   doc.setFillColor(darkColor[0], darkColor[1], darkColor[2]);
   doc.rect(15, y, 180, 8, 'F');
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   
-  doc.text('Nº Pedido', 17, y + 5.5);
-  doc.text('Data', 38, y + 5.5);
-  doc.text('Cliente', 56, y + 5.5);
+  doc.text('Cód. Pedido', 16, y + 5.5);
+  doc.text('Data', 44, y + 5.5);
+  doc.text('Cliente', 64, y + 5.5);
   doc.text('Representada', 105, y + 5.5);
-  doc.text('Status', 148, y + 5.5);
-  doc.text('Valor Total', 170, y + 5.5, { align: 'right' });
-  doc.text('Comissão', 193, y + 5.5, { align: 'right' });
+  doc.text('Status', 142, y + 5.5);
+  doc.text('Valor Total', 172, y + 5.5, { align: 'right' });
+  doc.text('Comissão', 195, y + 5.5, { align: 'right' });
 
   y += 8;
   doc.setFont('helvetica', 'normal');
@@ -342,16 +384,21 @@ export function gerarResumoMensalPDF(pedidos: Pedido[], clientes: Cliente[], rep
       const cli = clientes.find(c => c.id === p.clienteId);
       const rep = representadas.find(r => r.id === p.representadaId);
 
+      // Truncate values to fit precisely within allocated columns
+      const displayPedidoNum = p.numeroPedido.length > 15 ? p.numeroPedido.substring(0, 13) + '..' : p.numeroPedido;
+      const displayCliente = cli?.nomeFantasia ? (cli.nomeFantasia.length > 20 ? cli.nomeFantasia.substring(0, 18) + '..' : cli.nomeFantasia) : 'N/A';
+      const displayRepresentada = rep?.nomeFantasia ? (rep.nomeFantasia.length > 18 ? rep.nomeFantasia.substring(0, 16) + '..' : rep.nomeFantasia) : 'N/A';
+
       doc.setFontSize(7.5);
       doc.setFont('helvetica', 'bold');
-      doc.text(`#${p.numeroPedido}`, 17, y + 5.5);
+      doc.text(`#${displayPedidoNum}`, 16, y + 5.5);
       doc.setFont('helvetica', 'normal');
-      doc.text(formatarData(p.dataPedido), 38, y + 5.5);
-      doc.text(cli?.nomeFantasia ? (cli.nomeFantasia.length > 24 ? cli.nomeFantasia.substring(0, 22) + '..' : cli.nomeFantasia) : 'N/A', 56, y + 5.5);
-      doc.text(rep?.nomeFantasia ? (rep.nomeFantasia.length > 20 ? rep.nomeFantasia.substring(0, 18) + '..' : rep.nomeFantasia) : 'N/A', 105, y + 5.5);
-      doc.text(p.status.toUpperCase(), 148, y + 5.5);
-      doc.text(formatarMoeda(p.valorTotal), 170, y + 5.5, { align: 'right' });
-      doc.text(formatarMoeda(p.valorComissao), 193, y + 5.5, { align: 'right' });
+      doc.text(formatarData(p.dataPedido), 44, y + 5.5);
+      doc.text(displayCliente, 64, y + 5.5);
+      doc.text(displayRepresentada, 105, y + 5.5);
+      doc.text(p.status.toUpperCase(), 142, y + 5.5);
+      doc.text(formatarMoeda(p.valorTotal), 172, y + 5.5, { align: 'right' });
+      doc.text(formatarMoeda(p.valorComissao), 195, y + 5.5, { align: 'right' });
 
       y += 8;
     });
@@ -429,6 +476,27 @@ export function gerarDashboardPDF(
   doc.setFillColor(darkColor[0], darkColor[1], darkColor[2]);
   doc.rect(0, 0, 210, 36, 'F');
 
+  let headerTextOffset = 15;
+  
+  if (empresaRepresentacao?.logoUrl && empresaRepresentacao.logoUrl.startsWith('data:image/')) {
+    try {
+      doc.setFillColor(255, 255, 255);
+      doc.roundedRect(12, 5, 24, 24, 2, 2, 'F');
+      doc.addImage(empresaRepresentacao.logoUrl, 'PNG', 14, 7, 20, 20);
+      headerTextOffset = 42;
+    } catch (err) {
+      console.error('Erro ao adicionar logo no PDF do Relatório:', err);
+    }
+  } else {
+    doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.roundedRect(12, 8, 12, 12, 2, 2, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text('R', 18, 16.5, { align: 'center' });
+    headerTextOffset = 28;
+  }
+
   // Title
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
@@ -439,11 +507,11 @@ export function gerarDashboardPDF(
     ? `${empresaRepresentacao.razaoSocial} | CNPJ: ${empresaRepresentacao.cnpj}`
     : 'Relatório Executivo de Desempenho e Métricas';
 
-  doc.text(repName.toUpperCase(), 15, 13);
-  doc.setFontSize(8.5);
+  doc.text(repName.toUpperCase(), headerTextOffset, 14);
+  doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(190, 200, 210);
-  doc.text(repDetails, 15, 19);
+  doc.text(repDetails, headerTextOffset, 20);
 
   // Filter labels
   let filterText = 'Filtros aplicados: ';
@@ -454,7 +522,7 @@ export function gerarDashboardPDF(
   filterText += `Status: ${filtros.status || 'Todos'}`;
   doc.setFontSize(7.5);
   doc.setTextColor(148, 163, 184);
-  doc.text(filterText, 15, 26);
+  doc.text(filterText, headerTextOffset, 26);
 
   // Quick stats panels (4 cols)
   const colW = 42;
@@ -571,18 +639,18 @@ export function gerarDashboardPDF(
 
   y += 7;
 
-  // Table header
+  // Table header (Optimized Spacing to prevent any overlap)
   doc.setFillColor(241, 245, 249);
   doc.rect(15, y, 180, 7, 'F');
   doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
   doc.setFontSize(7.5);
-  doc.text('Cód. Pedido', 18, y + 4.8);
-  doc.text('Emissão', 38, y + 4.8);
-  doc.text('Cliente', 56, y + 4.8);
+  doc.text('Cód. Pedido', 16, y + 4.8);
+  doc.text('Emissão', 44, y + 4.8);
+  doc.text('Cliente', 64, y + 4.8);
   doc.text('Representada', 105, y + 4.8);
-  doc.text('Status', 148, y + 4.8);
-  doc.text('Total', 170, y + 4.8, { align: 'right' });
-  doc.text('Comissão', 193, y + 4.8, { align: 'right' });
+  doc.text('Status', 142, y + 4.8);
+  doc.text('Total', 172, y + 4.8, { align: 'right' });
+  doc.text('Comissão', 195, y + 4.8, { align: 'right' });
 
   y += 7;
 
@@ -605,16 +673,21 @@ export function gerarDashboardPDF(
       const cli = clientes.find(c => c.id === p.clienteId);
       const rep = representadas.find(r => r.id === p.representadaId);
 
+      // Truncate values to fit precisely within allocated columns
+      const displayPedidoNum = p.numeroPedido.length > 15 ? p.numeroPedido.substring(0, 13) + '..' : p.numeroPedido;
+      const displayCliente = cli?.nomeFantasia ? (cli.nomeFantasia.length > 20 ? cli.nomeFantasia.substring(0, 18) + '..' : cli.nomeFantasia) : 'N/A';
+      const displayRepresentada = rep?.nomeFantasia ? (rep.nomeFantasia.length > 18 ? rep.nomeFantasia.substring(0, 16) + '..' : rep.nomeFantasia) : 'N/A';
+
       doc.setFontSize(7);
       doc.setFont('helvetica', 'bold');
-      doc.text(`#${p.numeroPedido}`, 18, y + 4.8);
+      doc.text(`#${displayPedidoNum}`, 16, y + 4.8);
       doc.setFont('helvetica', 'normal');
-      doc.text(formatarData(p.dataPedido), 38, y + 4.8);
-      doc.text(cli?.nomeFantasia ? (cli.nomeFantasia.length > 22 ? cli.nomeFantasia.substring(0, 20) + '..' : cli.nomeFantasia) : 'N/A', 56, y + 4.8);
-      doc.text(rep?.nomeFantasia ? (rep.nomeFantasia.length > 18 ? rep.nomeFantasia.substring(0, 16) + '..' : rep.nomeFantasia) : 'N/A', 105, y + 4.8);
-      doc.text(p.status.toUpperCase(), 148, y + 4.8);
-      doc.text(formatarMoeda(p.valorTotal), 170, y + 4.8, { align: 'right' });
-      doc.text(formatarMoeda(p.valorComissao), 193, y + 4.8, { align: 'right' });
+      doc.text(formatarData(p.dataPedido), 44, y + 4.8);
+      doc.text(displayCliente, 64, y + 4.8);
+      doc.text(displayRepresentada, 105, y + 4.8);
+      doc.text(p.status.toUpperCase(), 142, y + 4.8);
+      doc.text(formatarMoeda(p.valorTotal), 172, y + 4.8, { align: 'right' });
+      doc.text(formatarMoeda(p.valorComissao), 195, y + 4.8, { align: 'right' });
 
       y += 7;
     });

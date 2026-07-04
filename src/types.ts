@@ -48,6 +48,7 @@ export interface Pedido {
   valorComissao: number; // Calculado: valorTotal * (comissaoPercentual / 100)
   status: PedidoStatus;
   observacoes?: string;
+  condicoesPagamento?: string;
   empresaRepresentacaoId?: string; // Multi-tenant link
 }
 
