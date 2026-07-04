@@ -364,33 +364,40 @@ export default function App() {
 
   const handleSelectEmpresa = (id: string) => {
     setActiveEmpresaId(id);
-    // Auto-select corresponding company user when switching to keep consistency
-    const companyUser = usuarios.find(u => u.empresaRepresentacaoId === id && u.ativo);
-    if (companyUser) {
-      setCurrentUserId(companyUser.id);
+    // Auto-select corresponding company user when switching to keep consistency (unless current is Raul)
+    const isRaul = currentUser?.id === 'usr-raul' || currentUser?.nome?.toLowerCase() === 'raul' || currentUser?.email === 'raul';
+    if (!isRaul) {
+      const companyUser = usuarios.find(u => u.empresaRepresentacaoId === id && u.ativo);
+      if (companyUser) {
+        setCurrentUserId(companyUser.id);
+      }
     }
   };
 
   const handleSelectUsuario = (id: string) => {
     setCurrentUserId(id);
     const selectedUsr = usuarios.find(u => u.id === id);
-    if (selectedUsr && selectedUsr.empresaRepresentacaoId !== activeEmpresaId) {
+    if (selectedUsr && selectedUsr.empresaRepresentacaoId && selectedUsr.empresaRepresentacaoId !== activeEmpresaId) {
       setActiveEmpresaId(selectedUsr.empresaRepresentacaoId);
     }
   };
 
   // --- Data Isolation Filter Layers ---
   // We filter all business collections by activeEmpresaId so different companies NEVER see each other's data!
-  const filteredRepresentadas = representadas.filter(r => r.empresaRepresentacaoId === activeEmpresaId);
-  const filteredClientes = clientes.filter(c => c.empresaRepresentacaoId === activeEmpresaId);
-  const filteredPedidos = pedidos.filter(p => p.empresaRepresentacaoId === activeEmpresaId);
-  const filteredProdutos = produtos.filter(p => p.empresaRepresentacaoId === activeEmpresaId);
+  const isRaul = currentUser?.id === 'usr-raul' || currentUser?.nome?.toLowerCase() === 'raul' || currentUser?.email === 'raul';
+  const showAllData = isRaul && activeEmpresaId === 'all';
+
+  const filteredRepresentadas = showAllData ? representadas : representadas.filter(r => r.empresaRepresentacaoId === activeEmpresaId);
+  const filteredClientes = showAllData ? clientes : clientes.filter(c => c.empresaRepresentacaoId === activeEmpresaId);
+  const filteredPedidos = showAllData ? pedidos : pedidos.filter(p => p.empresaRepresentacaoId === activeEmpresaId);
+  const filteredProdutos = showAllData ? produtos : produtos.filter(p => p.empresaRepresentacaoId === activeEmpresaId);
 
   // --- Handlers for CRUD ---
   
   // Representadas
   const handleAddRepresentada = async (rep: Representada) => {
-    const withEmp = { ...rep, empresaRepresentacaoId: activeEmpresaId };
+    const targetEmpId = activeEmpresaId === 'all' ? (empresas[0]?.id || '') : activeEmpresaId;
+    const withEmp = { ...rep, empresaRepresentacaoId: targetEmpId };
     setRepresentadas([...representadas, withEmp]);
     await saveRepresentada(withEmp);
   };
@@ -405,7 +412,8 @@ export default function App() {
 
   // Clientes
   const handleAddCliente = async (cli: Cliente) => {
-    const withEmp = { ...cli, empresaRepresentacaoId: activeEmpresaId };
+    const targetEmpId = activeEmpresaId === 'all' ? (empresas[0]?.id || '') : activeEmpresaId;
+    const withEmp = { ...cli, empresaRepresentacaoId: targetEmpId };
     setClientes([...clientes, withEmp]);
     await saveCliente(withEmp);
   };
@@ -420,7 +428,8 @@ export default function App() {
 
   // Pedidos
   const handleAddPedido = async (pedido: Pedido) => {
-    const withEmp = { ...pedido, empresaRepresentacaoId: activeEmpresaId };
+    const targetEmpId = activeEmpresaId === 'all' ? (empresas[0]?.id || '') : activeEmpresaId;
+    const withEmp = { ...pedido, empresaRepresentacaoId: targetEmpId };
     setPedidos([withEmp, ...pedidos]);
     await savePedido(withEmp);
   };
@@ -435,7 +444,8 @@ export default function App() {
 
   // Produtos
   const handleAddProduto = async (prod: Produto) => {
-    const withEmp = { ...prod, empresaRepresentacaoId: activeEmpresaId };
+    const targetEmpId = activeEmpresaId === 'all' ? (empresas[0]?.id || '') : activeEmpresaId;
+    const withEmp = { ...prod, empresaRepresentacaoId: targetEmpId };
     setProdutos([...produtos, withEmp]);
     await saveProduto(withEmp);
   };
@@ -450,14 +460,29 @@ export default function App() {
 
   // Empresas de Representação (Razões Sociais)
   const handleAddEmpresa = async (emp: EmpresaRepresentacao) => {
+    const isRaulUser = currentUser?.id === 'usr-raul' || currentUser?.nome?.toLowerCase() === 'raul' || currentUser?.email === 'raul';
+    if (!isRaulUser) {
+      alert('Apenas o administrador geral Raul possui permissão para cadastrar razões sociais.');
+      return;
+    }
     setEmpresas([...empresas, emp]);
     await saveEmpresa(emp);
   };
   const handleEditEmpresa = async (emp: EmpresaRepresentacao) => {
+    const isRaulUser = currentUser?.id === 'usr-raul' || currentUser?.nome?.toLowerCase() === 'raul' || currentUser?.email === 'raul';
+    if (!isRaulUser) {
+      alert('Apenas o administrador geral Raul possui permissão para editar razões sociais.');
+      return;
+    }
     setEmpresas(empresas.map(e => e.id === emp.id ? emp : e));
     await saveEmpresa(emp);
   };
   const handleDeleteEmpresa = async (id: string) => {
+    const isRaulUser = currentUser?.id === 'usr-raul' || currentUser?.nome?.toLowerCase() === 'raul' || currentUser?.email === 'raul';
+    if (!isRaulUser) {
+      alert('Apenas o administrador geral Raul possui permissão para remover razões sociais.');
+      return;
+    }
     setEmpresas(empresas.filter(e => e.id !== id));
     await deleteEmpresa(id);
   };
@@ -536,7 +561,7 @@ export default function App() {
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="font-serif font-extrabold text-lg text-slate-900 tracking-tight">RepresentaPRO</h1>
                 <span className="text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-extrabold shadow-xs">
-                  🏢 {activeEmpresa?.nomeFantasia}
+                  🏢 {activeEmpresaId === 'all' ? 'Todas as Representações' : activeEmpresa?.nomeFantasia}
                 </span>
                 <span className="text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-extrabold shadow-xs">
                   👤 {currentUser?.nome} ({currentUser?.role})

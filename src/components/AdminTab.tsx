@@ -258,6 +258,7 @@ export default function AdminTab({
   // Current states
   const activeUser = usuarios.find(u => u.id === currentUserId) || usuarios[0];
   const isCurrentUserAdmin = activeUser?.role === 'Administrador';
+  const isRaul = activeUser?.id === 'usr-raul' || activeUser?.nome?.toLowerCase() === 'raul' || activeUser?.email === 'raul';
 
   return (
     <div className="space-y-6">
@@ -286,6 +287,11 @@ export default function AdminTab({
                 onChange={(e) => onSelectEmpresa(e.target.value)}
                 className="w-full bg-slate-800/80 hover:bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-xs text-white font-bold transition-all focus:outline-none focus:border-emerald-500 cursor-pointer"
               >
+                {isRaul && (
+                  <option value="all" className="bg-slate-900 text-emerald-400 font-bold">
+                    👑 Todas as Representações (Acesso Total)
+                  </option>
+                )}
                 {empresas.map(emp => (
                   <option key={emp.id} value={emp.id} className="bg-slate-900 text-white">
                     🏢 {emp.nomeFantasia}
@@ -511,12 +517,13 @@ export default function AdminTab({
           <div className="flex justify-between items-center bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
             <div>
               <h4 className="font-serif font-bold text-sm text-slate-800">Razões Sociais e CNPJs</h4>
-              <p className="text-[11px] text-slate-400">Cadastre as razões sociais da representação. Os relatórios adaptam-se automaticamente de acordo com a empresa selecionada.</p>
+              <p className="text-[11px] text-slate-400">Cadastre as razões sociais da representação. Os relatórios adaptam-se automaticamente de acordo com a empresa selecionada. <span className="font-bold text-amber-600">(Apenas o administrador geral Raul pode adicionar ou remover razões sociais).</span></p>
             </div>
             <button
-              disabled={!isCurrentUserAdmin}
+              disabled={!isRaul}
               onClick={() => handleAddEditEmpresaClick()}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed shrink-0"
+              title={isRaul ? "Cadastrar nova empresa" : "Apenas o administrador geral (Raul) pode cadastrar empresas"}
             >
               <Plus className="w-4 h-4" />
               <span>Nova Razão Social</span>
@@ -577,18 +584,18 @@ export default function AdminTab({
                     Ativar no Sistema
                   </button>
                   <button
-                    disabled={!isCurrentUserAdmin}
+                    disabled={!isRaul}
                     onClick={() => handleAddEditEmpresaClick(emp)}
                     className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-slate-50 rounded transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                    title="Editar"
+                    title={isRaul ? "Editar" : "Apenas Raul pode alterar as razões sociais"}
                   >
                     <Edit3 className="w-3.5 h-3.5" />
                   </button>
                   <button
-                    disabled={!isCurrentUserAdmin || emp.id === activeEmpresaId}
+                    disabled={!isRaul || emp.id === activeEmpresaId}
                     onClick={() => handleDeleteEmpresaClick(emp.id, emp.nomeFantasia)}
                     className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                    title="Excluir"
+                    title={isRaul ? "Excluir" : "Apenas Raul pode remover as razões sociais"}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

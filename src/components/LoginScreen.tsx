@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Usuario, EmpresaRepresentacao } from '../types';
 import { Briefcase, Lock, User, AlertCircle, ChevronRight, Building2 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface LoginScreenProps {
   usuarios: Usuario[];
@@ -10,70 +10,70 @@ interface LoginScreenProps {
 }
 
 export default function LoginScreen({ usuarios, empresas, onLoginSuccess }: LoginScreenProps) {
-  const [selectedEmpresaId, setSelectedEmpresaId] = useState(() => {
-    return empresas[0]?.id || '';
-  });
-  
-  // Filter active users belonging to the selected company
-  const activeUsersForCompany = usuarios.filter(
-    u => u.empresaRepresentacaoId === selectedEmpresaId && u.ativo
-  );
-
-  const [selectedUserId, setSelectedUserId] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<Usuario | null>(null);
+  const [selectedEmpresaId, setSelectedEmpresaId] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  // Sync selectedUserId when selectedEmpresaId changes or active users load
+  // Close suggestions when clicking outside
   useEffect(() => {
-    if (activeUsersForCompany.length > 0) {
-      // Find if there is a previously selected user that is still valid, else default to first
-      const exists = activeUsersForCompany.find(u => u.id === selectedUserId);
-      if (!exists) {
-        setSelectedUserId(activeUsersForCompany[0].id);
-      }
-    } else {
-      setSelectedUserId('');
-    }
-  }, [selectedEmpresaId, usuarios]);
+    if (!showSuggestions) return;
+    const handleOutsideClick = () => {
+      setShowSuggestions(false);
+    };
+    document.addEventListener('click', handleOutsideClick);
+    return () => {
+      document.removeEventListener('click', handleOutsideClick);
+    };
+  }, [showSuggestions]);
 
-  const handleEmpresaChange = (empresaId: string) => {
-    setSelectedEmpresaId(empresaId);
+  // Filter active users based on search query
+  const filteredUsers = usuarios.filter(u => 
+    u.ativo && (
+      u.nome.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      u.email.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+  );
+
+  const handleSelectUser = (usr: Usuario) => {
+    setSelectedUser(usr);
+    setSearchQuery(usr.nome);
+    setShowSuggestions(false);
     setError(null);
-    const filtered = usuarios.filter(u => u.empresaRepresentacaoId === empresaId && u.ativo);
-    if (filtered.length > 0) {
-      setSelectedUserId(filtered[0].id);
+
+    if (usr.empresaRepresentacaoId) {
+      setSelectedEmpresaId(usr.empresaRepresentacaoId);
     } else {
-      setSelectedUserId('');
+      // For Raul (or anyone without linked company), we default to the first company in the list
+      setSelectedEmpresaId(empresas[0]?.id || '');
     }
+  };
+
+  const handleClearSelection = () => {
+    setSelectedUser(null);
+    setSearchQuery('');
+    setPassword('');
+    setError(null);
   };
 
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    if (!selectedEmpresaId) {
-      setError('Por favor, selecione uma Razão Social / Empresa.');
+    if (!selectedUser) {
+      setError('Por favor, pesquise e selecione um usuário.');
       return;
     }
 
-    if (!selectedUserId) {
-      setError('Nenhum usuário selecionado ou disponível para esta Empresa.');
-      return;
-    }
-
-    const matchedUser = usuarios.find(u => u.id === selectedUserId);
-    if (!matchedUser) {
-      setError('Usuário não localizado no sistema.');
-      return;
-    }
-
-    if (!matchedUser.ativo) {
+    if (!selectedUser.ativo) {
       setError('Esta conta de usuário está inativa. Contate o administrador.');
       return;
     }
 
     // Default password to '123456' if not specified in database
-    const correctPassword = matchedUser.senha || '123456';
+    const correctPassword = selectedUser.senha || '123456';
 
     if (correctPassword !== password) {
       setError('Senha incorreta para esta conta de usuário.');
@@ -81,7 +81,7 @@ export default function LoginScreen({ usuarios, empresas, onLoginSuccess }: Logi
     }
 
     // Login successful
-    onLoginSuccess(matchedUser.id, selectedEmpresaId);
+    onLoginSuccess(selectedUser.id, selectedEmpresaId);
   };
 
   return (
@@ -125,71 +125,103 @@ export default function LoginScreen({ usuarios, empresas, onLoginSuccess }: Logi
           )}
 
           <form onSubmit={handleLoginSubmit} className="space-y-4">
-            {/* Empresa Dropdown */}
-            <div>
-              <label htmlFor="empresa" className="block text-[10px] font-mono uppercase text-slate-400 font-bold tracking-wider mb-1.5">
-                Razão Social / Empresa para Acesso
-              </label>
-              <div className="relative rounded-xl shadow-xs">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                  <Building2 className="h-4 w-4" />
-                </div>
-                <select
-                  id="empresa"
-                  value={selectedEmpresaId}
-                  onChange={(e) => handleEmpresaChange(e.target.value)}
-                  className="block w-full pl-10 pr-10 py-3 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors appearance-none cursor-pointer font-bold"
-                >
-                  <option value="" disabled className="bg-slate-950 text-slate-500">Selecione uma Empresa</option>
-                  {empresas.map((emp) => (
-                    <option key={emp.id} value={emp.id} className="bg-slate-950 text-white">
-                      {emp.nomeFantasia}
-                    </option>
-                  ))}
-                </select>
-                <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-500">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-
-            {/* Usuario Dropdown */}
-            <div>
-              <label htmlFor="usuario" className="block text-[10px] font-mono uppercase text-slate-400 font-bold tracking-wider mb-1.5">
-                Usuário / Colaborador
+            {/* Search Input wrapper to stop outside click propagation */}
+            <div className="relative" onClick={(e) => e.stopPropagation()}>
+              <label htmlFor="usuario-search" className="block text-[10px] font-mono uppercase text-slate-400 font-bold tracking-wider mb-1.5">
+                Usuário / Colaborador (Digite para buscar)
               </label>
               <div className="relative rounded-xl shadow-xs">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
                   <User className="h-4 w-4" />
                 </div>
-                <select
-                  id="usuario"
-                  value={selectedUserId}
+                <input
+                  id="usuario-search"
+                  type="text"
+                  placeholder="Ex: Raul, André, Bruno..."
+                  value={searchQuery}
                   onChange={(e) => {
-                    setSelectedUserId(e.target.value);
+                    setSearchQuery(e.target.value);
+                    if (selectedUser && e.target.value !== selectedUser.nome) {
+                      setSelectedUser(null);
+                    }
+                    setShowSuggestions(true);
                     setError(null);
                   }}
-                  disabled={!selectedEmpresaId}
-                  className="block w-full pl-10 pr-10 py-3 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <option value="" disabled className="bg-slate-950 text-slate-500">
-                    {selectedEmpresaId ? 'Selecione o Usuário' : 'Selecione a empresa primeiro'}
-                  </option>
-                  {activeUsersForCompany.map((u) => (
-                    <option key={u.id} value={u.id} className="bg-slate-950 text-white">
-                      {u.nome} ({u.role})
-                    </option>
-                  ))}
-                </select>
-                <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-500">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
+                  onFocus={() => setShowSuggestions(true)}
+                  className="block w-full pl-10 pr-10 py-3 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors font-bold"
+                  autoComplete="off"
+                />
+                {selectedUser && (
+                  <button
+                    type="button"
+                    onClick={handleClearSelection}
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-white"
+                  >
+                    <span className="text-sm font-bold">&times;</span>
+                  </button>
+                )}
               </div>
+
+              {/* Suggestions Dropdown */}
+              <AnimatePresence>
+                {showSuggestions && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 5 }}
+                    className="absolute z-50 mt-1.5 w-full bg-slate-950 border border-slate-800 rounded-xl shadow-2xl overflow-hidden max-h-48 overflow-y-auto divide-y divide-slate-900"
+                  >
+                    {filteredUsers.length === 0 ? (
+                      <div className="p-3 text-xs text-slate-500 italic text-center">
+                        Nenhum usuário ativo encontrado
+                      </div>
+                    ) : (
+                      filteredUsers.map((usr) => {
+                        const userCompany = empresas.find(e => e.id === usr.empresaRepresentacaoId);
+                        return (
+                          <div
+                            key={usr.id}
+                            onClick={() => handleSelectUser(usr)}
+                            className="p-3 hover:bg-slate-900 cursor-pointer flex flex-col gap-0.5 text-left transition-all"
+                          >
+                            <div className="flex justify-between items-center">
+                              <span className="font-bold text-xs text-white">{usr.nome}</span>
+                              <span className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">{usr.role}</span>
+                            </div>
+                            <span className="text-[10px] text-slate-400 font-serif">
+                              {userCompany ? `🏢 ${userCompany.nomeFantasia}` : '👑 Administrador Geral (Acesso Total)'}
+                            </span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
+
+            {/* Identified Company Display */}
+            {selectedUser && (
+              <motion.div
+                initial={{ opacity: 0, y: -5 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-3 bg-slate-900 border border-slate-800 rounded-xl flex items-center gap-3"
+              >
+                <div className="p-2 bg-emerald-600/10 text-emerald-400 rounded-lg">
+                  <Building2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[9px] font-mono uppercase text-slate-500 block leading-none">
+                    Representação Identificada
+                  </span>
+                  <strong className="text-xs text-white mt-1 block">
+                    {selectedUser.empresaRepresentacaoId 
+                      ? (empresas.find(e => e.id === selectedUser.empresaRepresentacaoId)?.nomeFantasia || 'Carregando...')
+                      : 'Administrador Geral (Acesso a Todas)'}
+                  </strong>
+                </div>
+              </motion.div>
+            )}
 
             {/* Password Input */}
             <div>
@@ -209,14 +241,15 @@ export default function LoginScreen({ usuarios, empresas, onLoginSuccess }: Logi
                     setPassword(e.target.value);
                     setError(null);
                   }}
-                  className="block w-full pl-10 pr-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                  disabled={!selectedUser}
+                  className="block w-full pl-10 pr-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
 
             <button
               type="submit"
-              disabled={!selectedUserId}
+              disabled={!selectedUser}
               className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed text-white py-3 px-4 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer shadow-emerald-950/20 mt-6"
             >
               <span>Acessar o Sistema</span>

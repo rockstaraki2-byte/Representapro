@@ -279,6 +279,14 @@ export const SEED_EMPRESAS = [
 
 export const SEED_USUARIOS = [
   {
+    id: 'usr-raul',
+    nome: 'Raul',
+    email: 'raul',
+    role: 'Administrador' as const,
+    ativo: true,
+    senha: '230213'
+  },
+  {
     id: 'usr-1',
     nome: 'André Gestor (Planalto)',
     email: 'andre@planalto.rep.br',

