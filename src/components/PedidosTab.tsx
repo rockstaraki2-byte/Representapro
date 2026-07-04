@@ -196,8 +196,18 @@ export default function PedidosTab({
         setEmailPedido(null);
       }, 1800);
     } catch (err: any) {
-      console.error(err);
-      alert('Erro ao enviar e-mail: ' + (err.message || 'Tente novamente.'));
+      console.error('Erro ao enviar e-mail pelo servidor, usando fallback local:', err);
+      
+      // Fallback para link mailto: local caso esteja rodando sem backend (como no Vercel estático)
+      const mailtoUrl = `mailto:${encodeURIComponent(emailRecipient)}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
+      const confirmMailto = confirm(
+        'O servidor de e-mail do sistema não pôde ser alcançado neste ambiente (ex: Vercel estático).\n\n' +
+        'Deseja abrir o seu aplicativo de e-mail local (Outlook, Gmail, Apple Mail, etc.) para enviar o pedido diretamente do seu computador/celular?'
+      );
+      if (confirmMailto) {
+        window.open(mailtoUrl, '_blank');
+        setEmailPedido(null);
+      }
     } finally {
       setIsSendingEmail(false);
     }

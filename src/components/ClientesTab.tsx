@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Cliente, Pedido, Representada } from '../types';
-import { formatarCNPJ, formatarMoeda, formatarTelefone } from '../utils';
+import { formatarCNPJ, formatarMoeda, formatarTelefone, consultarCNPJ } from '../utils';
 import { 
   Plus, 
   Edit3, 
@@ -89,13 +89,7 @@ export default function ClientesTab({
     setIsSearchingCnpj(true);
     setValidationError(null);
     try {
-      const response = await fetch(`/api/cnpj/${rawCnpj}`);
-      if (!response.ok) {
-        const errJson = await response.json().catch(() => ({}));
-        throw new Error(errJson.error || 'Não foi possível encontrar este CNPJ ou serviço instável.');
-      }
-      
-      const data = await response.json();
+      const data = await consultarCNPJ(rawCnpj);
       
       // Map retrieved values to Form
       setForm(prev => ({

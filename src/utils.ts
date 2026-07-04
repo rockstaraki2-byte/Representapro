@@ -30,3 +30,58 @@ export const formatarTelefone = (tel: string): string => {
   }
   return tel;
 };
+
+export const consultarCNPJ = async (rawCnpj: string): Promise<any> => {
+  const cnpj = rawCnpj.replace(/\D/g, '');
+  if (cnpj.length !== 14) {
+    throw new Error('CNPJ inválido. Deve conter exatamente 14 dígitos.');
+  }
+
+  // 1. Tentar primeiro o endpoint do nosso backend (Express)
+  try {
+    const response = await fetch(`/api/cnpj/${cnpj}`);
+    if (response.ok) {
+      return await response.json();
+    }
+  } catch (err) {
+    console.warn('Endpoint do backend indisponível (ex: Vercel estático). Tentando consulta direta...', err);
+  }
+
+  // 2. Fallback: Consulta direta via BrasilAPI no lado do cliente (suporta CORS)
+  try {
+    const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+    if (response.ok) {
+      return await response.json();
+    }
+  } catch (err) {
+    console.warn('Falha na consulta direta à BrasilAPI. Tentando API de backup CNPJ.ws...', err);
+  }
+
+  // 3. Backup: Consulta direta via CNPJ.ws no lado do cliente (suporta CORS)
+  try {
+    const backupResponse = await fetch(`https://publica.cnpj.ws/cnpj/${cnpj}`);
+    if (backupResponse.ok) {
+      const backupData = await backupResponse.json();
+      return {
+        cnpj: backupData.cnpj,
+        razao_social: backupData.razao_social,
+        nome_fantasia: backupData.estabelecimento?.nome_fantasia || backupData.razao_social,
+        telefone1: (backupData.estabelecimento?.ddd1 && backupData.estabelecimento?.telefone1) 
+          ? `${backupData.estabelecimento.ddd1}${backupData.estabelecimento.telefone1}` 
+          : '',
+        email: backupData.estabelecimento?.email || '',
+        logradouro: backupData.estabelecimento?.logradouro || '',
+        numero: backupData.estabelecimento?.numero || '',
+        bairro: backupData.estabelecimento?.bairro || '',
+        municipio: backupData.estabelecimento?.cidade?.nome || '',
+        uf: backupData.estabelecimento?.estado?.sigla || '',
+        cnae_fiscal_descricao: backupData.estabelecimento?.atividade_principal?.descricao || ''
+      };
+    }
+  } catch (err) {
+    console.error('Todas as tentativas de consulta de CNPJ falharam:', err);
+  }
+
+  throw new Error('Não foi possível encontrar este CNPJ ou as APIs públicas estão instáveis. Por favor, tente preencher os dados manualmente.');
+};
+
