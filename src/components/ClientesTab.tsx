@@ -15,7 +15,8 @@ import {
   ChevronUp, 
   Loader2,
   X,
-  TrendingUp
+  TrendingUp,
+  SlidersHorizontal
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -38,6 +39,7 @@ export default function ClientesTab({
 }: ClientesTabProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
   const [isFormExpanded, setIsFormExpanded] = useState(false);
   const [isSearchingCnpj, setIsSearchingCnpj] = useState(false);
   const [selectedClientHistory, setSelectedClientHistory] = useState<Cliente | null>(null);
@@ -404,20 +406,52 @@ export default function ClientesTab({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <h4 className="font-serif font-bold text-base text-slate-700">Sua Carteira de Clientes ({clientesFiltrados.length})</h4>
           
-          {/* Caixa de Busca */}
-          <div className="relative max-w-xs w-full">
-            <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-              <Search className="h-4 w-4 text-slate-400" />
-            </span>
-            <input
-              type="text"
-              placeholder="Buscar cliente, CNPJ ou UF..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-xs focus:outline-none focus:border-emerald-600 text-slate-800"
-            />
+          <div className="flex items-center gap-2">
+            {/* Toggle de Filtros */}
+            <button
+              onClick={() => setIsFiltersExpanded(!isFiltersExpanded)}
+              className={`bg-white border text-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs ${
+                isFiltersExpanded ? 'border-emerald-500 text-emerald-700 bg-emerald-50/20' : 'border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span>Filtros e Busca</span>
+              {isFiltersExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
           </div>
         </div>
+
+        {/* Filtros Colapsáveis */}
+        <AnimatePresence>
+          {isFiltersExpanded && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden"
+            >
+              <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs">
+                {/* Caixa de Busca */}
+                <div>
+                  <label className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">Pesquisar por Cliente, CNPJ ou UF</label>
+                  <div className="relative w-full">
+                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                      <Search className="w-3.5 h-3.5" />
+                    </span>
+                    <input
+                      type="text"
+                      placeholder="Buscar cliente, CNPJ ou UF..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-1.5 text-xs focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-800 font-bold"
+                    />
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {clientesFiltrados.length === 0 ? (
           <div className="p-8 text-center bg-white border border-slate-200 rounded-xl text-xs text-slate-400 italic">

@@ -709,3 +709,367 @@ export function gerarDashboardPDF(
 
   doc.save(`Dashboard_Executivo_${new Date().toISOString().split('T')[0]}.pdf`);
 }
+
+/**
+ * Generates a commission summary report in PDF.
+ */
+export function gerarComissoesPDF(
+  pedidos: Pedido[], 
+  clientes: Cliente[], 
+  representadas: Representada[], 
+  empresaRepresentacao?: any
+) {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const primaryColor = [16, 185, 129]; // Emerald 500
+  const darkColor = [30, 41, 59]; // Slate 800
+  const lightColor = [248, 250, 252]; // Slate 50
+  const borderColor = [226, 232, 240]; // Slate 200
+
+  // Header Banner
+  doc.setFillColor(darkColor[0], darkColor[1], darkColor[2]);
+  doc.rect(0, 0, 210, 36, 'F');
+
+  let headerTextOffset = 30;
+
+  if (empresaRepresentacao?.logoUrl && empresaRepresentacao.logoUrl.startsWith('data:image/')) {
+    try {
+      const format = empresaRepresentacao.logoUrl.split(';')[0].split('/')[1]?.toUpperCase() || 'PNG';
+      doc.setFillColor(255, 255, 255);
+      doc.roundedRect(12, 5, 22, 22, 2, 2, 'F');
+      doc.addImage(empresaRepresentacao.logoUrl, format, 14, 7, 18, 18);
+      headerTextOffset = 38;
+    } catch (err) {
+      console.error('Erro ao adicionar logo:', err);
+    }
+  }
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.text('RECONCILIAÇÃO E CONTROLE DE COMISSÕES', headerTextOffset, 16);
+  
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(148, 163, 184);
+  doc.text(empresaRepresentacao?.nomeFantasia || 'RepresentaPRO', headerTextOffset, 22);
+  doc.text(`Cnpj: ${empresaRepresentacao?.cnpj || 'N/A'} | Contato: ${empresaRepresentacao?.telefone || 'N/A'}`, headerTextOffset, 26);
+
+  let y = 45;
+
+  // Overview box
+  const totalComissoes = pedidos.reduce((sum, p) => sum + (p.statusComissao !== 'Excluida' ? p.valorComissao : 0), 0);
+  const comissoesPagas = pedidos.filter(p => p.statusComissao === 'Paga').reduce((sum, p) => sum + p.valorComissao, 0);
+  const comissoesLiberadas = pedidos.filter(p => p.statusComissao === 'Liberada').reduce((sum, p) => sum + p.valorComissao, 0);
+  const comissoesPendentes = pedidos.filter(p => !p.statusComissao || p.statusComissao === 'Pendente').reduce((sum, p) => sum + p.valorComissao, 0);
+
+  doc.setFillColor(lightColor[0], lightColor[1], lightColor[2]);
+  doc.roundedRect(14, y, 182, 22, 3, 3, 'F');
+
+  doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.text('RESUMO DO PERÍODO', 18, y + 5);
+
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.text('TOTAL DE COMISSÕES', 18, y + 11);
+  doc.text('COMISSÕES PAGAS', 65, y + 11);
+  doc.text('COMISSÕES LIBERADAS', 112, y + 11);
+  doc.text('COMISSÕES PENDENTES', 158, y + 11);
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
+  doc.text(formatarMoeda(totalComissoes), 18, y + 17);
+  
+  doc.setTextColor(16, 185, 129); // Green for Paid
+  doc.text(formatarMoeda(comissoesPagas), 65, y + 17);
+  
+  doc.setTextColor(59, 130, 246); // Blue for Released
+  doc.text(formatarMoeda(comissoesLiberadas), 112, y + 17);
+  
+  doc.setTextColor(245, 158, 11); // Amber for Pending
+  doc.text(formatarMoeda(comissoesPendentes), 158, y + 17);
+
+  y += 30;
+
+  // Table header
+  doc.setFillColor(darkColor[0], darkColor[1], darkColor[2]);
+  doc.rect(14, y, 182, 7, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.text('Cód. Pedido', 16, y + 4.8);
+  doc.text('Emissão', 44, y + 4.8);
+  doc.text('Cliente', 62, y + 4.8);
+  doc.text('Representada', 102, y + 4.8);
+  doc.text('Status Com.', 138, y + 4.8);
+  doc.text('Vlr. Pedido', 168, y + 4.8, { align: 'right' });
+  doc.text('%', 178, y + 4.8, { align: 'right' });
+  doc.text('Comissão', 194, y + 4.8, { align: 'right' });
+
+  y += 7;
+
+  pedidos.forEach((p, idx) => {
+    // Page brake safety
+    if (y > 270) {
+      doc.addPage();
+      y = 15;
+      // Header again
+      doc.setFillColor(darkColor[0], darkColor[1], darkColor[2]);
+      doc.rect(14, y, 182, 7, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.text('Cód. Pedido', 16, y + 4.8);
+      doc.text('Emissão', 44, y + 4.8);
+      doc.text('Cliente', 62, y + 4.8);
+      doc.text('Representada', 102, y + 4.8);
+      doc.text('Status Com.', 138, y + 4.8);
+      doc.text('Vlr. Pedido', 168, y + 4.8, { align: 'right' });
+      doc.text('%', 178, y + 4.8, { align: 'right' });
+      doc.text('Comissão', 194, y + 4.8, { align: 'right' });
+      y += 7;
+    }
+
+    if (idx % 2 === 1) {
+      doc.setFillColor(lightColor[0], lightColor[1], lightColor[2]);
+      doc.rect(14, y, 182, 7, 'F');
+    }
+
+    doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
+    doc.line(14, y + 7, 196, y + 7);
+
+    const cli = clientes.find(c => c.id === p.clienteId);
+    const rep = representadas.find(r => r.id === p.representadaId);
+
+    const displayPedidoNum = p.numeroPedido.length > 13 ? p.numeroPedido.substring(0, 11) + '..' : p.numeroPedido;
+    const displayCliente = cli?.nomeFantasia ? (cli.nomeFantasia.length > 18 ? cli.nomeFantasia.substring(0, 16) + '..' : cli.nomeFantasia) : 'N/A';
+    const displayRepresentada = rep?.nomeFantasia ? (rep.nomeFantasia.length > 16 ? rep.nomeFantasia.substring(0, 14) + '..' : rep.nomeFantasia) : 'N/A';
+    const statusCom = p.statusComissao || 'Pendente';
+
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
+    doc.text(`#${displayPedidoNum}`, 16, y + 4.8);
+
+    doc.setFont('helvetica', 'normal');
+    doc.text(formatarData(p.dataPedido), 44, y + 4.8);
+    doc.text(displayCliente, 62, y + 4.8);
+    doc.text(displayRepresentada, 102, y + 4.8);
+    
+    // Status color
+    if (statusCom === 'Paga') {
+      doc.setTextColor(16, 185, 129);
+    } else if (statusCom === 'Liberada') {
+      doc.setTextColor(59, 130, 246);
+    } else {
+      doc.setTextColor(245, 158, 11);
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.text(statusCom.toUpperCase(), 138, y + 4.8);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
+    doc.text(formatarMoeda(p.valorTotal), 168, y + 4.8, { align: 'right' });
+    doc.text(`${p.comissaoPercentual}%`, 178, y + 4.8, { align: 'right' });
+    
+    doc.setFont('helvetica', 'bold');
+    doc.text(formatarMoeda(p.valorComissao), 194, y + 4.8, { align: 'right' });
+
+    y += 7;
+  });
+
+  // Footer
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(7.5);
+  doc.setTextColor(148, 163, 184);
+  doc.text(`Relatório de Controle de Comissões - Gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 105, 285, { align: 'center' });
+
+  doc.save(`Controle_Comissoes_${new Date().toISOString().split('T')[0]}.pdf`);
+}
+
+/**
+ * Generates a financial forecasting and provisioning report in PDF.
+ */
+export function gerarProvisionamentoPDF(
+  installments: {
+    id: string;
+    numeroPedido: string;
+    clienteNome: string;
+    representadaNome: string;
+    parcelaIndex: number;
+    parcelaTotal: number;
+    dataVencimento: string;
+    valorTotal: number;
+    valorComissao: number;
+    valorDespesa: number;
+  }[],
+  selectedMonth: string,
+  totalRevenue: number,
+  totalExpense: number,
+  empresaRepresentacao?: any
+) {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const primaryColor = [16, 185, 129]; // Emerald 500
+  const darkColor = [30, 41, 59]; // Slate 800
+  const lightColor = [248, 250, 252]; // Slate 50
+  const borderColor = [226, 232, 240]; // Slate 200
+
+  // Header Banner
+  doc.setFillColor(darkColor[0], darkColor[1], darkColor[2]);
+  doc.rect(0, 0, 210, 36, 'F');
+
+  let headerTextOffset = 30;
+
+  if (empresaRepresentacao?.logoUrl && empresaRepresentacao.logoUrl.startsWith('data:image/')) {
+    try {
+      const format = empresaRepresentacao.logoUrl.split(';')[0].split('/')[1]?.toUpperCase() || 'PNG';
+      doc.setFillColor(255, 255, 255);
+      doc.roundedRect(12, 5, 22, 22, 2, 2, 'F');
+      doc.addImage(empresaRepresentacao.logoUrl, format, 14, 7, 18, 18);
+      headerTextOffset = 38;
+    } catch (err) {
+      console.error('Erro ao adicionar logo:', err);
+    }
+  }
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.text('FLUXO DE CAIXA E PROVISIONAMENTO FINANCEIRO', headerTextOffset, 16);
+  
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(148, 163, 184);
+  doc.text(empresaRepresentacao?.nomeFantasia || 'RepresentaPRO', headerTextOffset, 22);
+  doc.text(`Período de Referência: ${selectedMonth === 'Todos' ? 'Geral' : selectedMonth} | Gerado em ${new Date().toLocaleDateString('pt-BR')}`, headerTextOffset, 26);
+
+  let y = 45;
+
+  // Overview Card
+  doc.setFillColor(lightColor[0], lightColor[1], lightColor[2]);
+  doc.roundedRect(14, y, 182, 22, 3, 3, 'F');
+
+  doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.text(`PROVISÃO DE RESULTADOS (${selectedMonth === 'Todos' ? 'TOTAL GERAL' : selectedMonth.toUpperCase()})`, 18, y + 5);
+
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.text('RECEITAS PREVISTAS (COMISSÕES)', 18, y + 11);
+  doc.text('DESPESAS PREVISTAS (REPASSE)', 75, y + 11);
+  doc.text('RESULTADO LÍQUIDO PROVISIONADO', 132, y + 11);
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(16, 185, 129); // Green for revenue
+  doc.text(formatarMoeda(totalRevenue), 18, y + 17);
+  
+  doc.setTextColor(239, 68, 68); // Red for expense
+  doc.text(formatarMoeda(totalExpense), 75, y + 17);
+  
+  doc.setTextColor(59, 130, 246); // Blue for net
+  doc.text(formatarMoeda(totalRevenue - totalExpense), 132, y + 17);
+
+  y += 30;
+
+  // Table Title
+  doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.text('DETALHAMENTO DE VENCIMENTOS E REPASSES', 14, y);
+  
+  y += 4;
+
+  // Table header
+  doc.setFillColor(darkColor[0], darkColor[1], darkColor[2]);
+  doc.rect(14, y, 182, 7, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.text('Vencimento', 16, y + 4.8);
+  doc.text('Pedido', 44, y + 4.8);
+  doc.text('Cliente', 62, y + 4.8);
+  doc.text('Representada', 102, y + 4.8);
+  doc.text('Parcela', 138, y + 4.8);
+  doc.text('Receita (+)', 166, y + 4.8, { align: 'right' });
+  doc.text('Despesa (-)', 194, y + 4.8, { align: 'right' });
+
+  y += 7;
+
+  installments.forEach((inst, idx) => {
+    // Page break safety
+    if (y > 270) {
+      doc.addPage();
+      y = 15;
+      // Header again
+      doc.setFillColor(darkColor[0], darkColor[1], darkColor[2]);
+      doc.rect(14, y, 182, 7, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.text('Vencimento', 16, y + 4.8);
+      doc.text('Pedido', 44, y + 4.8);
+      doc.text('Cliente', 62, y + 4.8);
+      doc.text('Representada', 102, y + 4.8);
+      doc.text('Parcela', 138, y + 4.8);
+      doc.text('Receita (+)', 166, y + 4.8, { align: 'right' });
+      doc.text('Despesa (-)', 194, y + 4.8, { align: 'right' });
+      y += 7;
+    }
+
+    if (idx % 2 === 1) {
+      doc.setFillColor(lightColor[0], lightColor[1], lightColor[2]);
+      doc.rect(14, y, 182, 7, 'F');
+    }
+
+    doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
+    doc.line(14, y + 7, 196, y + 7);
+
+    const displayPedidoNum = inst.numeroPedido.length > 13 ? inst.numeroPedido.substring(0, 11) + '..' : inst.numeroPedido;
+    const displayCliente = inst.clienteNome.length > 18 ? inst.clienteNome.substring(0, 16) + '..' : inst.clienteNome;
+    const displayRepresentada = inst.representadaNome.length > 16 ? inst.representadaNome.substring(0, 14) + '..' : inst.representadaNome;
+
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
+    doc.text(formatarData(inst.dataVencimento), 16, y + 4.8);
+
+    doc.setFont('helvetica', 'bold');
+    doc.text(`#${displayPedidoNum}`, 44, y + 4.8);
+
+    doc.setFont('helvetica', 'normal');
+    doc.text(displayCliente, 62, y + 4.8);
+    doc.text(displayRepresentada, 102, y + 4.8);
+    doc.text(`${inst.parcelaIndex}/${inst.parcelaTotal}`, 138, y + 4.8);
+    
+    doc.setTextColor(16, 185, 129); // Green
+    doc.setFont('helvetica', 'bold');
+    doc.text(formatarMoeda(inst.valorComissao), 166, y + 4.8, { align: 'right' });
+    
+    doc.setTextColor(239, 68, 68); // Red
+    doc.text(formatarMoeda(inst.valorDespesa), 194, y + 4.8, { align: 'right' });
+
+    y += 7;
+  });
+
+  // Footer
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(7.5);
+  doc.setTextColor(148, 163, 184);
+  doc.text(`Fluxo de Provisão Financeira - Gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 105, 285, { align: 'center' });
+
+  doc.save(`Provisionamento_Financeiro_${new Date().toISOString().split('T')[0]}.pdf`);
+}

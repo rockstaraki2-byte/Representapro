@@ -1,6 +1,8 @@
 import { initializeApp } from 'firebase/app';
 import { 
-  getFirestore, 
+  initializeFirestore, 
+  persistentLocalCache, 
+  persistentMultipleTabManager,
   collection, 
   doc, 
   getDocs, 
@@ -39,9 +41,13 @@ const finalFirebaseConfig = {
   measurementId: "G-K4P1RYCKW5"
 };
 
-// Initialize Firebase
+// Initialize Firebase with robust offline persistent local caching
 const app = initializeApp(finalFirebaseConfig);
-export const db = getFirestore(app);
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  })
+});
 
 export enum OperationType {
   CREATE = 'create',

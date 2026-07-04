@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { onSnapshot, collection } from 'firebase/firestore';
 import { 
   LayoutDashboard, 
   Briefcase, 
@@ -8,8 +9,15 @@ import {
   TrendingUp, 
   AlertCircle,
   Tag,
-  ShieldCheck
+  ShieldCheck,
+  Coins,
+  Bell,
+  BellOff,
+  BellRing,
+  Info,
+  X as CloseIcon
 } from 'lucide-react';
+import { formatarMoeda } from './utils';
 import { motion, AnimatePresence } from 'motion/react';
 
 // Import Types
@@ -58,6 +66,7 @@ import RepresentadasTab from './components/RepresentadasTab';
 import ClientesTab from './components/ClientesTab';
 import PedidosTab from './components/PedidosTab';
 import ProdutosTab from './components/ProdutosTab';
+import FinanceiroTab from './components/FinanceiroTab';
 import AdminTab from './components/AdminTab';
 import LoginScreen from './components/LoginScreen';
 
@@ -121,12 +130,87 @@ export default function App() {
   });
 
   // --- UI Navigation & Active States ---
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'representadas' | 'clientes' | 'pedidos' | 'produtos' | 'admin'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'representadas' | 'clientes' | 'pedidos' | 'produtos' | 'financeiro' | 'admin'>('dashboard');
   const [activePedidoToEdit, setActivePedidoToEdit] = useState<Pedido | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [showRulesGuide, setShowRulesGuide] = useState<boolean>(false);
   const [hasPermissionError, setHasPermissionError] = useState<boolean>(false);
+
+  // --- Push & In-App Notification System ---
+  interface AppNotification {
+    id: string;
+    title: string;
+    message: string;
+    type: 'order' | 'commission';
+    timestamp: string;
+    read: boolean;
+  }
+
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => {
+    const saved = localStorage.getItem('rep_notifications');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [showNotificationsMenu, setShowNotificationsMenu] = useState(false);
+  const [activeToast, setActiveToast] = useState<AppNotification | null>(null);
+  const [notificationPermission, setNotificationPermission] = useState<string>(() => {
+    return 'Notification' in window ? Notification.permission : 'unsupported';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('rep_notifications', JSON.stringify(notifications));
+  }, [notifications]);
+
+  const triggerAppNotification = (title: string, message: string, type: 'order' | 'commission') => {
+    const newNotif: AppNotification = {
+      id: `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+      title,
+      message,
+      type,
+      timestamp: new Date().toISOString(),
+      read: false
+    };
+
+    setNotifications(prev => [newNotif, ...prev].slice(0, 50));
+    setActiveToast(newNotif);
+
+    // Auto-dismiss toast after 6 seconds
+    setTimeout(() => {
+      setActiveToast(current => current?.id === newNotif.id ? null : current);
+    }, 6000);
+
+    // Trigger Native Browser push if permitted
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.ready.then((reg) => {
+            reg.showNotification(title, {
+              body: message,
+              icon: '/manifest.json',
+              tag: newNotif.id,
+            });
+          });
+        } else {
+          new Notification(title, { body: message });
+        }
+      } catch (e) {
+        new Notification(title, { body: message });
+      }
+    }
+  };
+
+  const requestNotificationPermission = async () => {
+    if (!('Notification' in window)) return;
+    const result = await Notification.requestPermission();
+    setNotificationPermission(result);
+    if (result === 'granted') {
+      triggerAppNotification(
+        'Notificações Ativadas! 🔔',
+        'Você agora receberá alertas push em tempo real sobre novos pedidos e comissões.',
+        'order'
+      );
+    }
+  };
 
   // --- LocalStorage Synchronization ---
   useEffect(() => {
@@ -215,9 +299,68 @@ export default function App() {
     initFirestoreData();
   }, []);
 
+  // --- Real-time Firestore Subscription with Push Notifications ---
+  const isFirstSnapshot = React.useRef(true);
+
+  useEffect(() => {
+    if (loading) return;
+
+    isFirstSnapshot.current = true;
+
+    const unsubscribe = onSnapshot(collection(db, 'pedidos'), (snapshot) => {
+      const updatedList: Pedido[] = [];
+      snapshot.forEach((doc) => {
+        updatedList.push(doc.data() as Pedido);
+      });
+
+      // Avoid triggering notifications on the initial load of existing records
+      if (!isFirstSnapshot.current) {
+        snapshot.docChanges().forEach((change) => {
+          const data = change.doc.data() as Pedido;
+          
+          if (data.empresaRepresentacaoId === activeEmpresaId) {
+            if (change.type === 'added') {
+              const repName = representadas.find(r => r.id === data.representadaId)?.nomeFantasia || 'Fábrica';
+              const cliName = clientes.find(c => c.id === data.clienteId)?.nomeFantasia || 'Cliente';
+              
+              triggerAppNotification(
+                'Novo Pedido de Venda 📦',
+                `Pedido nº ${data.numeroPedido} (${cliName} ➔ ${repName}) no valor de ${formatarMoeda(data.valorTotal)} foi inserido no sistema.`,
+                'order'
+              );
+            } else if (change.type === 'modified') {
+              const oldVer = pedidos.find(p => p.id === data.id);
+              if (data.statusComissao === 'Liberada' && (!oldVer || oldVer.statusComissao !== 'Liberada')) {
+                const repName = representadas.find(r => r.id === data.representadaId)?.nomeFantasia || 'Fábrica';
+                triggerAppNotification(
+                  'Comissão Liberada! 💸',
+                  `A comissão de ${formatarMoeda(data.valorComissao)} do pedido nº ${data.numeroPedido} (${repName}) foi liberada pelo administrador.`,
+                  'commission'
+                );
+              }
+            }
+          }
+        });
+      }
+
+      setPedidos(updatedList);
+      isFirstSnapshot.current = false;
+    }, (err) => {
+      console.warn("Erro no snapshot de pedidos (modo offline):", err);
+    });
+
+    return () => unsubscribe();
+  }, [loading, activeEmpresaId, representadas, clientes]);
+
   // --- Active Selections and Helpers ---
   const activeEmpresa = empresas.find(e => e.id === activeEmpresaId) || empresas[0];
   const currentUser = usuarios.find(u => u.id === currentUserId) || usuarios[0];
+
+  useEffect(() => {
+    if ((activeTab === 'admin' || activeTab === 'financeiro') && currentUser?.role !== 'Administrador') {
+      setActiveTab('dashboard');
+    }
+  }, [activeTab, currentUser]);
 
   const handleSelectEmpresa = (id: string) => {
     setActiveEmpresaId(id);
@@ -435,6 +578,127 @@ export default function App() {
               <span>Testar Firebase</span>
             </button>
 
+            {/* Bell/Notification Menu */}
+            <div className="relative">
+              <button
+                onClick={() => setShowNotificationsMenu(!showNotificationsMenu)}
+                className={`relative p-2 rounded-xl border transition-all cursor-pointer ${
+                  showNotificationsMenu 
+                    ? 'bg-emerald-50 border-emerald-300 text-emerald-700' 
+                    : 'bg-white border-slate-200/85 hover:bg-slate-50 text-slate-600'
+                }`}
+                title="Notificações"
+              >
+                {notifications.some(n => !n.read) ? (
+                  <BellRing className="w-4 h-4 text-emerald-600 animate-bounce" />
+                ) : (
+                  <Bell className="w-4 h-4" />
+                )}
+                
+                {notifications.filter(n => !n.read).length > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[9px] font-extrabold w-4 h-4 rounded-full flex items-center justify-center border border-white">
+                    {notifications.filter(n => !n.read).length}
+                  </span>
+                )}
+              </button>
+
+              {/* Notification Dropdown Menu */}
+              <AnimatePresence>
+                {showNotificationsMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute right-0 mt-2 w-80 bg-white rounded-xl border border-slate-200 shadow-xl z-50 overflow-hidden"
+                  >
+                    {/* Header */}
+                    <div className="bg-slate-50 px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                      <span className="font-serif font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                        <Bell className="w-3.5 h-3.5 text-emerald-600" /> Notificações
+                      </span>
+                      <div className="flex gap-1.5">
+                        {notifications.length > 0 && (
+                          <button
+                            onClick={() => {
+                              setNotifications(notifications.map(n => ({ ...n, read: true })));
+                            }}
+                            className="text-[10px] text-emerald-700 hover:underline font-bold"
+                          >
+                            Marcar lidas
+                          </button>
+                        )}
+                        {notifications.length > 0 && (
+                          <span className="text-slate-300">|</span>
+                        )}
+                        <button
+                          onClick={() => {
+                            setNotifications([]);
+                          }}
+                          className="text-[10px] text-red-600 hover:underline font-bold"
+                        >
+                          Limpar
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Permission Status */}
+                    <div className="px-4 py-2 border-b border-slate-100 bg-emerald-50/30 flex items-center justify-between text-[10px] text-slate-500">
+                      <span className="flex items-center gap-1">
+                        {notificationPermission === 'granted' ? (
+                          <>🏢 Notificações do Navegador: <strong className="text-emerald-700 uppercase font-extrabold">Ativas</strong></>
+                        ) : (
+                          <>📴 Notificações do Navegador: <strong className="text-slate-500 uppercase font-extrabold">Inativas</strong></>
+                        )}
+                      </span>
+                      {notificationPermission !== 'granted' && (
+                        <button
+                          onClick={requestNotificationPermission}
+                          className="text-[10px] text-emerald-700 hover:underline font-extrabold"
+                        >
+                          Ativar
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Notifications List */}
+                    <div className="max-h-64 overflow-y-auto divide-y divide-slate-100">
+                      {notifications.length === 0 ? (
+                        <div className="p-6 text-center text-xs text-slate-400 italic flex flex-col items-center gap-1.5">
+                          <Info className="w-5 h-5 text-slate-300" />
+                          Nenhum alerta recebido ainda
+                        </div>
+                      ) : (
+                        notifications.map(n => (
+                          <div 
+                            key={n.id} 
+                            onClick={() => {
+                              setNotifications(notifications.map(item => item.id === n.id ? { ...item, read: true } : item));
+                            }}
+                            className={`p-3 text-left transition-all hover:bg-slate-50 cursor-pointer ${
+                              !n.read ? 'bg-emerald-50/20 border-l-2 border-emerald-500' : ''
+                            }`}
+                          >
+                            <div className="flex justify-between items-start gap-1">
+                              <span className="font-bold text-[11px] text-slate-800 block">
+                                {n.title}
+                              </span>
+                              <span className="text-[8px] font-mono text-slate-400 whitespace-nowrap">
+                                {new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-500 mt-1 line-clamp-2">
+                              {n.message}
+                            </p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
             <button
               onClick={() => {
                 setIsAuthenticated(false);
@@ -543,19 +807,37 @@ export default function App() {
             <span>Pedidos de Venda</span>
           </button>
 
+          {/* Tab: Financeiro */}
+          {currentUser?.role === 'Administrador' && (
+            <button 
+              id="tab-financeiro"
+              onClick={() => { setActiveTab('financeiro'); setActivePedidoToEdit(null); }}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'financeiro' 
+                  ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-100' 
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <Coins className="w-4 h-4" />
+              <span>Financeiro & Comissões</span>
+            </button>
+          )}
+
           {/* Tab 5: Administração & Multiempresas */}
-          <button 
-            id="tab-admin"
-            onClick={() => { setActiveTab('admin'); setActivePedidoToEdit(null); }}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ml-auto ${
-              activeTab === 'admin' 
-                ? 'bg-slate-800 text-white shadow-sm' 
-                : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100 border border-dashed border-slate-200'
-            }`}
-          >
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span>Configurações & Acesso</span>
-          </button>
+          {currentUser?.role === 'Administrador' && (
+            <button 
+              id="tab-admin"
+              onClick={() => { setActiveTab('admin'); setActivePedidoToEdit(null); }}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ml-auto ${
+                activeTab === 'admin' 
+                  ? 'bg-slate-800 text-white shadow-sm' 
+                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100 border border-dashed border-slate-200'
+              }`}
+            >
+              <ShieldCheck className="w-4 h-4 text-emerald-600" />
+              <span>Configurações & Acesso</span>
+            </button>
+          )}
 
         </div>
 
@@ -628,7 +910,19 @@ export default function App() {
                 />
               )}
 
-              {activeTab === 'admin' && (
+              {activeTab === 'financeiro' && currentUser?.role === 'Administrador' && (
+                <FinanceiroTab 
+                  pedidos={filteredPedidos}
+                  clientes={filteredClientes}
+                  representadas={filteredRepresentadas}
+                  onEditPedido={handleEditPedido}
+                  onDeletePedido={handleDeletePedido}
+                  currentUser={currentUser}
+                  empresaRepresentacao={activeEmpresa}
+                />
+              )}
+
+              {activeTab === 'admin' && currentUser?.role === 'Administrador' && (
                 <AdminTab 
                   empresas={empresas}
                   usuarios={usuarios}
@@ -719,16 +1013,31 @@ export default function App() {
           <span className="text-[8px] font-bold mt-0.5">Pedidos</span>
         </button>
 
+        {/* Mobile Tab 5.5: Financeiro */}
+        {currentUser?.role === 'Administrador' && (
+          <button
+            onClick={() => { setActiveTab('financeiro'); setActivePedidoToEdit(null); }}
+            className={`flex flex-col items-center justify-center w-12 py-1 text-center transition-all cursor-pointer ${
+              activeTab === 'financeiro' ? 'text-emerald-600 scale-105' : 'text-slate-500'
+            }`}
+          >
+            <Coins className="w-4 h-4" />
+            <span className="text-[8px] font-bold mt-0.5">Financeiro</span>
+          </button>
+        )}
+
         {/* Mobile Tab 6: Admin */}
-        <button
-          onClick={() => { setActiveTab('admin'); }}
-          className={`flex flex-col items-center justify-center w-12 py-1 text-center transition-all cursor-pointer ${
-            activeTab === 'admin' ? 'text-slate-800 scale-105' : 'text-slate-400'
-          }`}
-        >
-          <ShieldCheck className="w-4 h-4 text-emerald-500" />
-          <span className="text-[8px] font-bold mt-0.5">Acesso</span>
-        </button>
+        {currentUser?.role === 'Administrador' && (
+          <button
+            onClick={() => { setActiveTab('admin'); }}
+            className={`flex flex-col items-center justify-center w-12 py-1 text-center transition-all cursor-pointer ${
+              activeTab === 'admin' ? 'text-slate-800 scale-105' : 'text-slate-400'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-emerald-500" />
+            <span className="text-[8px] font-bold mt-0.5">Acesso</span>
+          </button>
+        )}
 
       </div>
 
@@ -828,6 +1137,54 @@ service cloud.firestore {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating Push Toast Alerts */}
+      <AnimatePresence>
+        {activeToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, x: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, x: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            className="fixed bottom-6 right-6 z-50 max-w-sm bg-slate-900 text-white rounded-xl shadow-2xl p-4 border border-slate-800 flex gap-3.5"
+          >
+            <div className="shrink-0 p-1.5 bg-emerald-600/20 text-emerald-400 rounded-lg h-fit self-start">
+              {activeToast.type === 'order' ? (
+                <ShoppingCart className="w-5 h-5 text-emerald-400 animate-pulse" />
+              ) : (
+                <Coins className="w-5 h-5 text-amber-400 animate-bounce" />
+              )}
+            </div>
+            
+            <div className="flex-1 text-left">
+              <span className="font-serif font-bold text-xs text-slate-100 block">
+                {activeToast.title}
+              </span>
+              <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
+                {activeToast.message}
+              </p>
+              <div className="flex justify-between items-center mt-2 border-t border-slate-800 pt-1.5">
+                <span className="text-[9px] font-mono text-slate-500">Notificação Push (Sistema)</span>
+                <button
+                  onClick={() => {
+                    setNotifications(notifications.map(item => item.id === activeToast.id ? { ...item, read: true } : item));
+                    setActiveToast(null);
+                  }}
+                  className="text-[10px] text-emerald-400 hover:text-emerald-300 font-bold hover:underline"
+                >
+                  Entendi
+                </button>
+              </div>
+            </div>
+
+            <button 
+              onClick={() => setActiveToast(null)} 
+              className="text-slate-500 hover:text-slate-300 transition-colors h-fit self-start cursor-pointer"
+            >
+              <CloseIcon className="w-4 h-4" />
+            </button>
+          </motion.div>
         )}
       </AnimatePresence>
 

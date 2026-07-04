@@ -21,6 +21,16 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { gerarDashboardPDF } from '../lib/pdfGenerator';
+import { 
+  ResponsiveContainer, 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  Cell
+} from 'recharts';
 
 interface DashboardTabProps {
   pedidos: Pedido[];
@@ -237,86 +247,150 @@ export default function DashboardTab({
 
       {/* Resumo de Metas */}
       <div className="bg-white rounded-xl border border-slate-200/80 p-6 shadow-sm">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
-          <div>
-            <div className="flex items-center gap-2 text-emerald-800">
-              <Award className="w-5 h-5 text-emerald-600" />
-              <h2 className="font-serif font-bold text-xl text-slate-800">Acompanhamento de Metas</h2>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Faturamento focado na meta estipulada para o período de {meta.anoMes.split('-')[1]}/{meta.anoMes.split('-')[0]}.
-            </p>
-          </div>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          
+          {/* Lado Esquerdo: Progresso e Controles */}
+          <div className="lg:col-span-6 flex flex-col justify-between space-y-4">
+            <div>
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-2">
+                <div>
+                  <div className="flex items-center gap-2 text-emerald-800">
+                    <Award className="w-5 h-5 text-emerald-600" />
+                    <h2 className="font-serif font-bold text-xl text-slate-800">Acompanhamento de Metas</h2>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Faturamento focado na meta estipulada para o período de {meta.anoMes.split('-')[1]}/{meta.anoMes.split('-')[0]}.
+                  </p>
+                </div>
 
-          <div className="flex items-center gap-3 shrink-0">
-            {editingMeta ? (
-              <form onSubmit={handleSaveMeta} className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
-                <span className="text-xs font-mono text-slate-500 pl-1.5">R$</span>
-                <input 
-                  type="number" 
-                  className="w-28 bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:outline-none focus:border-emerald-600"
-                  value={tempMetaValor}
-                  onChange={(e) => setTempMetaValor(e.target.value)}
-                  min="1"
-                  step="any"
-                  autoFocus
-                />
-                <button type="submit" className="bg-emerald-600 text-white hover:bg-emerald-700 px-2.5 py-1 rounded text-xs cursor-pointer">
-                  Salvar
-                </button>
-                <button type="button" onClick={() => setEditingMeta(false)} className="text-slate-400 hover:text-slate-600 text-xs px-1.5">
-                  Cancelar
-                </button>
-              </form>
-            ) : (
-              <div className="text-right">
-                <span className="text-[10px] uppercase font-mono tracking-wider text-slate-400 block">Meta Mensal</span>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono font-bold text-slate-700 text-sm">{formatarMoeda(meta.metaMensal)}</span>
-                  <button 
-                    onClick={() => {
-                      setTempMetaValor(meta.metaMensal.toString());
-                      setEditingMeta(true);
-                    }} 
-                    className="text-xs text-emerald-700 hover:text-emerald-800 hover:underline cursor-pointer"
-                  >
-                    Ajustar
-                  </button>
+                <div className="flex items-center gap-3 shrink-0">
+                  {editingMeta ? (
+                    <form onSubmit={handleSaveMeta} className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
+                      <span className="text-xs font-mono text-slate-500 pl-1.5">R$</span>
+                      <input 
+                        type="number" 
+                        className="w-28 bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:outline-none focus:border-emerald-600"
+                        value={tempMetaValor}
+                        onChange={(e) => setTempMetaValor(e.target.value)}
+                        min="1"
+                        step="any"
+                        autoFocus
+                      />
+                      <button type="submit" className="bg-emerald-600 text-white hover:bg-emerald-700 px-2.5 py-1 rounded text-xs cursor-pointer">
+                        Salvar
+                      </button>
+                      <button type="button" onClick={() => setEditingMeta(false)} className="text-slate-400 hover:text-slate-600 text-xs px-1.5">
+                        Cancelar
+                      </button>
+                    </form>
+                  ) : (
+                    <div className="text-right">
+                      <span className="text-[10px] uppercase font-mono tracking-wider text-slate-400 block">Meta Mensal</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-slate-700 text-sm">{formatarMoeda(meta.metaMensal)}</span>
+                        <button 
+                          onClick={() => {
+                            setTempMetaValor(meta.metaMensal.toString());
+                            setEditingMeta(true);
+                          }} 
+                          className="text-xs text-emerald-700 hover:text-emerald-800 hover:underline cursor-pointer font-bold"
+                        >
+                          Ajustar
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-            )}
-          </div>
-        </div>
 
-        {/* Barra de Progresso */}
-        <div className="space-y-2">
-          <div className="flex justify-between text-xs font-mono">
-            <span className="text-slate-500">Progresso Atual: <strong className="text-slate-700">{percentualMeta}%</strong></span>
-            <span className="text-slate-500">{formatarMoeda(faturamentoTotal)} de {formatarMoeda(meta.metaMensal)}</span>
+              {/* Barra de Progresso */}
+              <div className="space-y-2 mt-4">
+                <div className="flex justify-between text-xs font-mono">
+                  <span className="text-slate-500 font-bold">Progresso Atual: <strong className="text-emerald-700">{percentualMeta}%</strong></span>
+                  <span className="text-slate-500 font-bold">{formatarMoeda(faturamentoTotal)} de {formatarMoeda(meta.metaMensal)}</span>
+                </div>
+                <div className="w-full bg-slate-100 rounded-full h-3.5 overflow-hidden border border-slate-200/50">
+                  <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${percentualMeta}%` }}
+                    transition={{ duration: 1, ease: "easeOut" }}
+                    className={`h-full rounded-full ${
+                      percentualMeta >= 100 
+                        ? 'bg-gradient-to-r from-emerald-500 to-teal-500' 
+                        : percentualMeta >= 60 
+                        ? 'bg-gradient-to-r from-emerald-600 to-emerald-500' 
+                        : 'bg-gradient-to-r from-amber-500 to-emerald-600'
+                    }`}
+                  />
+                </div>
+                {percentualMeta >= 100 ? (
+                  <p className="text-[11px] text-emerald-700 font-serif italic mt-1 font-bold">
+                    ✨ Parabéns! Você superou a meta de vendas comercial estabelecida para o período!
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-slate-400 font-serif italic mt-1">
+                    Faltam <strong>{formatarMoeda(Math.max(meta.metaMensal - faturamentoTotal, 0))}</strong> para atingir a meta comercial.
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
-          <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
-            <motion.div 
-              initial={{ width: 0 }}
-              animate={{ width: `${percentualMeta}%` }}
-              transition={{ duration: 1, ease: "easeOut" }}
-              className={`h-full rounded-full ${
-                percentualMeta >= 100 
-                  ? 'bg-gradient-to-r from-emerald-500 to-teal-500' 
-                  : percentualMeta >= 60 
-                  ? 'bg-gradient-to-r from-emerald-600 to-emerald-500' 
-                  : 'bg-gradient-to-r from-amber-500 to-emerald-600'
-              }`}
-            />
+
+          {/* Lado Direito: Gráfico de Barras Recharts comparando Meta x Realizado */}
+          <div className="lg:col-span-6 bg-slate-50/50 rounded-xl border border-slate-150 p-4 flex flex-col justify-between">
+            <div className="flex justify-between items-center mb-3">
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Gráfico Comparativo de Metas</span>
+              <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                faturamentoTotal >= meta.metaMensal ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
+              }`}>
+                {faturamentoTotal >= meta.metaMensal ? 'META ALCANÇADA' : 'EM ANDAMENTO'}
+              </span>
+            </div>
+
+            <div className="h-40 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart 
+                  data={[
+                    { name: 'Meta Mensal', Valor: meta.metaMensal },
+                    { name: 'Vendas Realizadas', Valor: faturamentoTotal }
+                  ]} 
+                  margin={{ top: 10, right: 10, left: 10, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis 
+                    dataKey="name" 
+                    tickLine={false} 
+                    axisLine={false}
+                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
+                  />
+                  <YAxis 
+                    tickLine={false} 
+                    axisLine={false}
+                    tick={{ fill: '#64748b', fontSize: 9 }}
+                    tickFormatter={(val) => `R$ ${(val / 1000).toFixed(0)}k`}
+                  />
+                  <Tooltip 
+                    cursor={{ fill: 'rgba(0,0,0,0.02)' }}
+                    formatter={(value: any) => [formatarMoeda(Number(value)), 'Valor']}
+                    contentStyle={{ 
+                      backgroundColor: '#ffffff', 
+                      borderColor: '#e2e8f0', 
+                      borderRadius: '8px', 
+                      fontSize: '11px',
+                      fontWeight: 'bold',
+                      color: '#1e293b',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                    }}
+                  />
+                  <Bar dataKey="Valor" radius={[4, 4, 0, 0]} barSize={35}>
+                    <Cell fill="#94a3b8" />
+                    <Cell fill={faturamentoTotal >= meta.metaMensal ? '#10b981' : '#f59e0b'} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-          {percentualMeta >= 100 ? (
-            <p className="text-[11px] text-emerald-700 font-serif italic mt-1">
-              ✨ Parabéns! Você superou a meta de vendas mensal estabelecida para a sua representação comercial!
-            </p>
-          ) : (
-            <p className="text-[11px] text-slate-400 font-serif italic mt-1">
-              Faltam {formatarMoeda(Math.max(meta.metaMensal - faturamentoTotal, 0))} para atingir a meta.
-            </p>
-          )}
+
         </div>
       </div>
 

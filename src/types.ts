@@ -47,6 +47,7 @@ export interface Pedido {
   comissaoPercentual: number; // Porcentagem de comissão deste pedido
   valorComissao: number; // Calculado: valorTotal * (comissaoPercentual / 100)
   status: PedidoStatus;
+  statusComissao?: 'Pendente' | 'Liberada' | 'Paga' | 'Excluida';
   observacoes?: string;
   condicoesPagamento?: string;
   empresaRepresentacaoId?: string; // Multi-tenant link

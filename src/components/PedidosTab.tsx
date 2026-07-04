@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Pedido, Cliente, Representada, OrderItem, PedidoStatus, Produto } from '../types';
 import { formatarMoeda, formatarData } from '../utils';
-import { Plus, Trash2, Edit3, Eye, FileText, Check, Percent, AlertCircle, ShoppingCart, Mail, Send, Printer, Loader2, Download, MessageCircle, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, Edit3, Eye, FileText, Check, Percent, AlertCircle, ShoppingCart, Mail, Send, Printer, Loader2, Download, MessageCircle, ChevronDown, SlidersHorizontal, ChevronUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { gerarPedidoPDF, gerarResumoMensalPDF } from '../lib/pdfGenerator';
 
@@ -116,6 +116,9 @@ export default function PedidosTab({
   empresaRepresentacao,
 }: PedidosTabProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
+  
+  // Collapsible Filters
+  const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
   
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -777,7 +780,7 @@ export default function PedidosTab({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <h4 className="font-serif font-bold text-base text-slate-700">Relatório Geral de Vendas ({pedidosFiltrados.length})</h4>
           
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center gap-2">
             {/* Botão de Exportar Relatório PDF Mensal */}
             <button
               onClick={() => {
@@ -791,32 +794,65 @@ export default function PedidosTab({
               <span>Resumo do Mês (PDF)</span>
             </button>
 
-            {/* Filtro de Status */}
-            <select 
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-700 font-bold cursor-pointer focus:outline-none"
+            {/* Toggle de Filtros */}
+            <button
+              onClick={() => setIsFiltersExpanded(!isFiltersExpanded)}
+              className={`bg-white border text-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs ${
+                isFiltersExpanded ? 'border-emerald-500 text-emerald-700 bg-emerald-50/20' : 'border-slate-200 hover:bg-slate-50'
+              }`}
             >
-              <option value="Todos">Todos os Status</option>
-              <option value="Rascunho">Rascunho</option>
-              <option value="Pendente">Pendente</option>
-              <option value="Faturado">Faturado</option>
-              <option value="Pago">Comissão Recebida</option>
-              <option value="Cancelado">Cancelado</option>
-            </select>
-
-            {/* Caixa de Busca */}
-            <div className="relative max-w-xs w-full">
-              <input
-                type="text"
-                placeholder="Buscar por Nº, cliente..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-lg pl-3 pr-3 py-1.5 text-xs focus:outline-none focus:border-emerald-600 text-slate-800"
-              />
-            </div>
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span>Filtros</span>
+              {isFiltersExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
           </div>
         </div>
+
+        {/* Filtros Colapsáveis */}
+        <AnimatePresence>
+          {isFiltersExpanded && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden"
+            >
+              <div className="bg-white rounded-xl border border-slate-200 p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 shadow-xs">
+                {/* Filtro de Status */}
+                <div>
+                  <label className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">Filtrar por Status</label>
+                  <select 
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-700 font-bold cursor-pointer focus:outline-none focus:border-emerald-600 focus:bg-white"
+                  >
+                    <option value="Todos">Todos os Status</option>
+                    <option value="Rascunho">Rascunho</option>
+                    <option value="Pendente">Pendente</option>
+                    <option value="Faturado">Faturado</option>
+                    <option value="Pago">Comissão Recebida</option>
+                    <option value="Cancelado">Cancelado</option>
+                  </select>
+                </div>
+
+                {/* Caixa de Busca */}
+                <div>
+                  <label className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">Pesquisar Pedido / Cliente</label>
+                  <div className="relative w-full">
+                    <input
+                      type="text"
+                      placeholder="Buscar por Nº, cliente..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-800 font-bold"
+                    />
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {pedidosFiltrados.length === 0 ? (
           <div className="p-8 text-center bg-white border border-slate-200 rounded-xl text-xs text-slate-400 italic">
