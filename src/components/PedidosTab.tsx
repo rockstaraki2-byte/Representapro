@@ -160,7 +160,7 @@ export default function PedidosTab({
     }
   }, [activePedidoToEdit]);
 
-  // Helper to auto generate order number in format: PEDIDO-XXXXX - NOME DO CLIENTE ABREVIADO - ANO (XXXX)
+  // Helper to auto generate sequential order numbers in format: PED-CLIENTE-0001-YEAR
   const handleAutoGenerateOrderNumber = () => {
     const selectedCliente = clientes.find(c => c.id === clienteId);
     const clientName = selectedCliente?.nomeFantasia || selectedCliente?.razaoSocial || '';
@@ -168,22 +168,54 @@ export default function PedidosTab({
     const suffixes = ['ltda', 'me', 'epp', 'sa', 's/a', 'eireli', 'comercial', 'representacoes', 'industria', 'e', 'de', 'para', 'do', 'da'];
     const words = clientName
       .toLowerCase()
-      .split(/\s+/)
+      .split(/[^a-zA-Z0-9]+/)
       .filter(w => w && !suffixes.includes(w));
     
-    let abr = words.slice(0, 2).join(' ').toUpperCase();
-    if (!abr && clientName) abr = clientName.substring(0, 10).toUpperCase();
+    let abr = words.slice(0, 2).join('-').toUpperCase();
+    if (!abr && clientName) {
+      abr = clientName.replace(/[^a-zA-Z0-9]/g, '').substring(0, 10).toUpperCase();
+    }
     if (!abr) abr = 'CLIENTE';
     
-    const randomNum = Math.floor(10000 + Math.random() * 90000);
-    const year = dataPedido ? dataPedido.split('-')[0] : new Date().getFullYear();
+    const year = dataPedido ? dataPedido.split('-')[0] : new Date().getFullYear().toString();
     
-    setNumeroPedido(`PEDIDO-${randomNum} - ${abr} - ${year}`);
+    // Find highest sequence among ALL orders for this client & year
+    let maxSeq = 0;
+    pedidos.forEach(p => {
+      const match = p.numeroPedido.match(/^PED-(.+)-(\d+)-(\d{4})$/i);
+      if (match) {
+        const pAbr = match[1].toUpperCase();
+        const pSeq = parseInt(match[2], 10);
+        const pYear = match[3];
+        
+        if (pAbr === abr && pYear === year) {
+          if (pSeq > maxSeq) {
+            maxSeq = pSeq;
+          }
+        }
+      } else if (p.clienteId === clienteId) {
+        // Fallback: if it's the same client, try to parse any digits
+        const digits = p.numeroPedido.match(/(\d+)/g);
+        if (digits) {
+          digits.forEach(dStr => {
+            const val = parseInt(dStr, 10);
+            if (val > maxSeq && val < 9000 && dStr !== year) {
+              maxSeq = val;
+            }
+          });
+        }
+      }
+    });
+    
+    const nextSeq = maxSeq + 1;
+    const seqStr = String(nextSeq).padStart(4, '0');
+    
+    setNumeroPedido(`PED-${abr}-${seqStr}-${year}`);
   };
 
-  // Automatically trigger code generation for new orders if client is selected and number is empty
+  // Automatically trigger code generation for new orders if client is selected and number is empty or formatted
   useEffect(() => {
-    if (!editingId && clienteId && (numeroPedido === '' || numeroPedido.startsWith('PEDIDO-'))) {
+    if (!editingId && clienteId && (numeroPedido === '' || numeroPedido.startsWith('PEDIDO-') || numeroPedido.startsWith('PED-'))) {
       handleAutoGenerateOrderNumber();
     }
   }, [clienteId, dataPedido, editingId]);
@@ -306,7 +338,18 @@ export default function PedidosTab({
       
       // Generate the PDF without saving/downloading in browser
       const doc = gerarPedidoPDF(emailPedido, cli, rep, empresaRepresentacao, true);
-      const pdfBase64 = doc.output('datauristring').split(',')[1];
+      
+      let dataUri = '';
+      try {
+        dataUri = doc.output('datauristring');
+      } catch (errOutput) {
+        dataUri = doc.output('dataurlstring');
+      }
+      
+      // Decode percent-encoded characters like %2B, %2F, %3D back to actual Base64 chars
+      const decodedUri = decodeURIComponent(dataUri);
+      const parts = decodedUri.split(',');
+      const pdfBase64 = parts[1] || parts[0];
       const pdfFilename = `Pedido_${emailPedido.numeroPedido}_${rep?.nomeFantasia || 'Venda'}.pdf`;
 
       const response = await fetch('/api/email/send', {

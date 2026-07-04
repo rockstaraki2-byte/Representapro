@@ -20,7 +20,19 @@ import {
   Coins
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { gerarComissoesPDF, gerarProvisionamentoPDF } from '../lib/pdfGenerator';
+import { 
+  ResponsiveContainer, 
+  AreaChart, 
+  Area, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  Legend, 
+  BarChart, 
+  Bar 
+} from 'recharts';
+import { gerarComissoesPDF, gerarProvisionamentoPDF, gerarResumoMensalPDF } from '../lib/pdfGenerator';
 
 interface FinanceiroTabProps {
   pedidos: Pedido[];
@@ -63,6 +75,24 @@ export default function FinanceiroTab({
   const [searchQuery, setSearchQuery] = useState('');
   const [comissaoStatusFilter, setComissaoStatusFilter] = useState<string>('Todos');
   const [representadaFilter, setRepresentadaFilter] = useState<string>('Todos');
+
+  // --- Relatório de Desempenho Mensal State & Memo ---
+  const [selectedReportMonth, setSelectedReportMonth] = useState<string>(() => {
+    return new Date().toISOString().slice(0, 7);
+  });
+
+  const availableMonthsForReport = useMemo(() => {
+    const months = new Set<string>();
+    pedidos.forEach(p => {
+      if (p.dataPedido) {
+        months.add(p.dataPedido.slice(0, 7)); // "YYYY-MM"
+      }
+    });
+    if (months.size === 0) {
+      months.add(new Date().toISOString().slice(0, 7));
+    }
+    return Array.from(months).sort().reverse(); // Show latest months first
+  }, [pedidos]);
 
   // Editing state
   const [editingPedido, setEditingPedido] = useState<Pedido | null>(null);
@@ -212,6 +242,61 @@ export default function FinanceiroTab({
     return { totalRevenue, totalExpense, totalNet: totalRevenue - totalExpense };
   }, [filteredProvisionedInstallments]);
 
+  // --- Project Monthly Provisões Timeline ---
+  const monthlyProvisaoTimeline = useMemo(() => {
+    const monthsNomes = [
+      'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
+      'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'
+    ];
+    
+    // Group provisioned installments by month
+    const grouped: { [key: string]: { receita: number; despesa: number } } = {};
+    
+    allProvisionedInstallments.forEach(inst => {
+      const matchRep = provisaoRepresentadaFilter === 'Todos' || 
+        pedidos.find(p => p.numeroPedido === inst.numeroPedido)?.representadaId === provisaoRepresentadaFilter;
+        
+      if (!matchRep) return;
+      
+      const ym = inst.dataVencimento.slice(0, 7); // "YYYY-MM"
+      if (!grouped[ym]) {
+        grouped[ym] = { receita: 0, despesa: 0 };
+      }
+      grouped[ym].receita += inst.valorComissao;
+      grouped[ym].despesa += inst.valorDespesa;
+    });
+    
+    // Sort keys
+    const sortedKeys = Object.keys(grouped).sort();
+    
+    // If empty, generate at least 6 months starting from today
+    if (sortedKeys.length === 0) {
+      const today = new Date();
+      for (let i = 0; i < 6; i++) {
+        const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+        const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        grouped[ym] = { receita: 0, despesa: 0 };
+        sortedKeys.push(ym);
+      }
+      sortedKeys.sort();
+    }
+    
+    return sortedKeys.map(ym => {
+      const [year, month] = ym.split('-');
+      const mIdx = parseInt(month, 10) - 1;
+      const label = `${monthsNomes[mIdx]}/${year.substring(2)}`;
+      const rec = grouped[ym].receita;
+      const des = grouped[ym].despesa;
+      return {
+        key: ym,
+        name: label,
+        "Receita (Comissão)": rec,
+        "Despesa (Repasse)": des,
+        "Fluxo Líquido": rec - des
+      };
+    });
+  }, [allProvisionedInstallments, provisaoRepresentadaFilter, pedidos]);
+
   // Save the Commission Edit
   const handleSaveCommissionEdit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -283,7 +368,7 @@ export default function FinanceiroTab({
               <p className="text-xs text-slate-500">Controle de recebíveis de comissão para pedidos faturados de fábricas representadas.</p>
             </div>
             
-            <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
               <button
                 onClick={() => setIsFiltersExpanded(!isFiltersExpanded)}
                 className={`bg-white border text-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs ${
@@ -295,12 +380,36 @@ export default function FinanceiroTab({
                 {isFiltersExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
               </button>
 
+              <div className="flex items-center gap-1.5 bg-slate-100 rounded-lg p-1 border border-slate-200 shadow-2xs">
+                <select
+                  value={selectedReportMonth}
+                  onChange={(e) => setSelectedReportMonth(e.target.value)}
+                  className="bg-transparent text-[11px] font-bold text-slate-700 focus:outline-none px-2 cursor-pointer font-mono"
+                  title="Selecionar mês para o relatório de desempenho"
+                >
+                  {availableMonthsForReport.map(m => (
+                    <option key={m} value={m} className="bg-white text-slate-850">
+                      {m.split('-')[1]}/{m.split('-')[0]}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => gerarResumoMensalPDF(pedidos, clientes, representadas, selectedReportMonth, empresaRepresentacao)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded-md text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer shadow-sm"
+                  title="Exportar Relatório de Desempenho Mensal"
+                >
+                  <Download className="w-3 h-3" />
+                  <span>Desempenho Mensal</span>
+                </button>
+              </div>
+
               <button
                 onClick={() => gerarComissoesPDF(filteredComissoesPedidos, clientes, representadas, empresaRepresentacao)}
                 className="bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs ml-auto sm:ml-0"
+                title="Exportar Espelho de Comissões"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span>Exportar PDF</span>
+                <span>Espelho Comissões</span>
               </button>
             </div>
           </div>
@@ -645,6 +754,139 @@ export default function FinanceiroTab({
                   {formatarMoeda(provisaoSummary.totalNet)}
                 </strong>
                 <p className="text-[10px] text-slate-400 font-bold mt-0.5">Margem líquida provisionada de comissão</p>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Gráficos de Provisionamento */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            
+            {/* Gráfico de Evolução (AreaChart) */}
+            <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200 p-4 flex flex-col justify-between shadow-xs">
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <h3 className="font-serif font-bold text-sm text-slate-800">Evolução do Fluxo de Caixa Provisionado</h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Projeção cronológica mensal de comissões e repasses</p>
+                </div>
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 font-mono">
+                  {monthlyProvisaoTimeline.length}M
+                </span>
+              </div>
+              
+              <div className="h-56 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart
+                    data={monthlyProvisaoTimeline}
+                    margin={{ top: 10, right: 10, left: 10, bottom: 5 }}
+                  >
+                    <defs>
+                      <linearGradient id="colorReceita" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.15}/>
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0.01}/>
+                      </linearGradient>
+                      <linearGradient id="colorDespesa" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.15}/>
+                        <stop offset="95%" stopColor="#ef4444" stopOpacity={0.01}/>
+                      </linearGradient>
+                      <linearGradient id="colorLiquido" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15}/>
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.01}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis 
+                      dataKey="name" 
+                      stroke="#94a3b8" 
+                      fontSize={10} 
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis 
+                      stroke="#94a3b8" 
+                      fontSize={10} 
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(value) => `R$ ${value >= 1000 ? (value / 1000).toFixed(0) + 'k' : value}`}
+                    />
+                    <Tooltip
+                      formatter={(value: any, name: string) => [formatarMoeda(Number(value)), name]}
+                      contentStyle={{ 
+                        backgroundColor: '#ffffff', 
+                        borderColor: '#e2e8f0', 
+                        borderRadius: '12px',
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)'
+                      }}
+                    />
+                    <Legend 
+                      verticalAlign="top" 
+                      height={28} 
+                      iconSize={8} 
+                      iconType="circle"
+                      wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }}
+                    />
+                    <Area type="monotone" dataKey="Receita (Comissão)" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorReceita)" />
+                    <Area type="monotone" dataKey="Despesa (Repasse)" stroke="#ef4444" strokeWidth={2} fillOpacity={1} fill="url(#colorDespesa)" />
+                    <Area type="monotone" dataKey="Fluxo Líquido" stroke="#3b82f6" strokeWidth={2.5} fillOpacity={1} fill="url(#colorLiquido)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Gráfico Comparativo Mensal (BarChart) */}
+            <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 p-4 flex flex-col justify-between shadow-xs">
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <h3 className="font-serif font-bold text-sm text-slate-800">Proporção Receita vs Despesa</h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Estrutura de custos operacionais e repasses</p>
+                </div>
+              </div>
+
+              <div className="h-56 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={monthlyProvisaoTimeline}
+                    margin={{ top: 10, right: 10, left: 10, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis 
+                      dataKey="name" 
+                      stroke="#94a3b8" 
+                      fontSize={10} 
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis 
+                      stroke="#94a3b8" 
+                      fontSize={10} 
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(value) => `R$ ${value >= 1000 ? (value / 1000).toFixed(0) + 'k' : value}`}
+                    />
+                    <Tooltip
+                      formatter={(value: any, name: string) => [formatarMoeda(Number(value)), name]}
+                      contentStyle={{ 
+                        backgroundColor: '#ffffff', 
+                        borderColor: '#e2e8f0', 
+                        borderRadius: '12px',
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)'
+                      }}
+                    />
+                    <Legend 
+                      verticalAlign="top" 
+                      height={28} 
+                      iconSize={8} 
+                      iconType="circle"
+                      wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }}
+                    />
+                    <Bar dataKey="Receita (Comissão)" fill="#10b981" radius={[3, 3, 0, 0]} name="Receita" barSize={12} />
+                    <Bar dataKey="Despesa (Repasse)" fill="#ef4444" radius={[3, 3, 0, 0]} name="Repasse" barSize={12} />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </div>
 

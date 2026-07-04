@@ -29,7 +29,8 @@ import {
   YAxis, 
   CartesianGrid, 
   Tooltip, 
-  Cell
+  Cell,
+  Legend
 } from 'recharts';
 
 interface DashboardTabProps {
@@ -127,6 +128,42 @@ export default function DashboardTab({
   });
 
   const maxVendas = Math.max(...faturamentoPorRepresentada.map(item => item.vendas), 10000);
+
+  // Generate the last 6 months chronologically up to the current date / latest order date to show comparison
+  const monthlyPerformanceData = React.useMemo(() => {
+    const monthsNomes = [
+      'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
+      'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'
+    ];
+    
+    // Reference date (current month/year)
+    let refDate = new Date();
+    if (pedidos.length > 0) {
+      const dates = pedidos.map(p => new Date(p.dataPedido)).filter(d => !isNaN(d.getTime()));
+      if (dates.length > 0) {
+        refDate = new Date(Math.max(...dates.map(d => d.getTime())));
+      }
+    }
+    
+    const dataList = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(refDate.getFullYear(), refDate.getMonth() - i, 1);
+      const year = d.getFullYear();
+      const monthNum = d.getMonth() + 1;
+      const monthStr = `${year}-${String(monthNum).padStart(2, '0')}`;
+      
+      const totalMonthVendas = pedidos
+        .filter(p => p.status !== 'Cancelado' && p.dataPedido.startsWith(monthStr))
+        .reduce((sum, p) => sum + p.valorTotal, 0);
+        
+      dataList.push({
+        name: `${monthsNomes[d.getMonth()]}/${String(year).substring(2)}`,
+        "Vendas": totalMonthVendas,
+        "Meta": meta.metaMensal
+      });
+    }
+    return dataList;
+  }, [pedidos, meta.metaMensal]);
 
   return (
     <div className="space-y-6">
@@ -336,10 +373,10 @@ export default function DashboardTab({
             </div>
           </div>
 
-          {/* Lado Direito: Gráfico de Barras Recharts comparando Meta x Realizado */}
+          {/* Lado Direito: Gráfico de Barras Recharts comparando Vendas Mensais x Meta Estabelecida */}
           <div className="lg:col-span-6 bg-slate-50/50 rounded-xl border border-slate-150 p-4 flex flex-col justify-between">
             <div className="flex justify-between items-center mb-3">
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Gráfico Comparativo de Metas</span>
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Desempenho Comercial Mensal vs. Meta</span>
               <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
                 faturamentoTotal >= meta.metaMensal ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
               }`}>
@@ -350,10 +387,7 @@ export default function DashboardTab({
             <div className="h-40 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart 
-                  data={[
-                    { name: 'Meta Mensal', Valor: meta.metaMensal },
-                    { name: 'Vendas Realizadas', Valor: faturamentoTotal }
-                  ]} 
+                  data={monthlyPerformanceData} 
                   margin={{ top: 10, right: 10, left: 10, bottom: 5 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -371,7 +405,7 @@ export default function DashboardTab({
                   />
                   <Tooltip 
                     cursor={{ fill: 'rgba(0,0,0,0.02)' }}
-                    formatter={(value: any) => [formatarMoeda(Number(value)), 'Valor']}
+                    formatter={(value: any, name: string) => [formatarMoeda(Number(value)), name]}
                     contentStyle={{ 
                       backgroundColor: '#ffffff', 
                       borderColor: '#e2e8f0', 
@@ -382,10 +416,15 @@ export default function DashboardTab({
                       boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
                     }}
                   />
-                  <Bar dataKey="Valor" radius={[4, 4, 0, 0]} barSize={35}>
-                    <Cell fill="#94a3b8" />
-                    <Cell fill={faturamentoTotal >= meta.metaMensal ? '#10b981' : '#f59e0b'} />
-                  </Bar>
+                  <Legend 
+                    verticalAlign="top" 
+                    height={24} 
+                    iconSize={10} 
+                    iconType="circle"
+                    wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }}
+                  />
+                  <Bar dataKey="Vendas" fill="#10b981" radius={[4, 4, 0, 0]} name="Vendas Realizadas" />
+                  <Bar dataKey="Meta" fill="#e2e8f0" radius={[4, 4, 0, 0]} name="Meta Estabelecida" />
                 </BarChart>
               </ResponsiveContainer>
             </div>

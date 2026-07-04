@@ -184,10 +184,24 @@ async function startServer() {
         };
 
         if (attachment) {
+          let cleanBase64 = attachment;
+          if (cleanBase64.includes('%')) {
+            try {
+              cleanBase64 = decodeURIComponent(cleanBase64);
+            } catch (e) {
+              console.warn('Falha ao decodificar URI do anexo:', e);
+            }
+          }
+          if (cleanBase64.includes('base64,')) {
+            cleanBase64 = cleanBase64.split('base64,')[1];
+          }
+          // Remove any potential whitespace or newlines that might disrupt decoding
+          cleanBase64 = cleanBase64.replace(/\s/g, '');
+
           mailOptions.attachments = [
             {
               filename: attachmentName || 'pedido.pdf',
-              content: Buffer.from(attachment, 'base64'),
+              content: Buffer.from(cleanBase64, 'base64'),
               contentType: 'application/pdf',
             }
           ];
