@@ -282,7 +282,8 @@ export default function PedidosTab({
     
     const text = `Olá, *${cli?.contato || 'Cliente'}*!\n\nSegue o resumo do seu *Pedido #${p.numeroPedido}* em parceria com a fábrica *${rep?.nomeFantasia || 'Representada'}*:\n\n*Data do Pedido:* ${formattedDate}\n*Status:* ${p.status}\n\n*Itens do Pedido:*\n${itemsList}\n\n*Valor Total do Pedido:* *${totalVal}*\n\nSe tiver qualquer dúvida, estou à disposição.\nAtenciosamente,\nRepresentação Comercial`;
     
-    const phone = cli?.telefone ? cli.telefone.replace(/\D/g, '') : '';
+    const firstPhone = cli?.telefone ? cli.telefone.split('/')[0].split('|')[0] : '';
+    const phone = firstPhone.replace(/\D/g, '');
     let formattedPhone = phone;
     if (phone && phone.length <= 11) {
       formattedPhone = `55${phone}`;
@@ -294,8 +295,17 @@ export default function PedidosTab({
 
   const handleSendEmail = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!emailPedido) return;
     setIsSendingEmail(true);
     try {
+      const cli = clientes.find(c => c.id === emailPedido.clienteId);
+      const rep = representadas.find(r => r.id === emailPedido.representadaId);
+      
+      // Generate the PDF without saving/downloading in browser
+      const doc = gerarPedidoPDF(emailPedido, cli, rep, empresaRepresentacao, true);
+      const pdfBase64 = doc.output('datauristring').split(',')[1];
+      const pdfFilename = `Pedido_${emailPedido.numeroPedido}_${rep?.nomeFantasia || 'Venda'}.pdf`;
+
       const response = await fetch('/api/email/send', {
         method: 'POST',
         headers: {
@@ -305,6 +315,8 @@ export default function PedidosTab({
           to: emailRecipient,
           subject: emailSubject,
           body: emailBody,
+          attachment: pdfBase64,
+          attachmentName: pdfFilename,
         }),
       });
 

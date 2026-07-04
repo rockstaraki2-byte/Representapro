@@ -96,7 +96,7 @@ export default function ClientesTab({
         ...prev,
         razaoSocial: data.razao_social || '',
         nomeFantasia: data.nome_fantasia || data.razao_social || '',
-        telefone: data.telefone1 || '',
+        telefone: [data.telefone1, data.telefone2].filter(Boolean).join(' / '),
         email: data.email || '',
         endereco: (data.logradouro ? `${data.logradouro}, ${data.numero || 'S/N'}${data.bairro ? ` - ${data.bairro}` : ''}` : '') || prev.endereco || '',
         cidade: data.municipio || '',

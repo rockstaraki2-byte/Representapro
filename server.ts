@@ -94,7 +94,21 @@ async function startServer() {
       }
 
       const data = await response.json();
-      return res.json(data);
+      const mapped = {
+        ...data,
+        razao_social: data.razao_social || data.razaoSocial || '',
+        nome_fantasia: data.nome_fantasia || data.nomeFantasia || data.razao_social || '',
+        telefone1: data.ddd_telefone_1 || data.telefone1 || '',
+        telefone2: data.ddd_telefone_2 || '',
+        email: data.email || '',
+        logradouro: data.logradouro || '',
+        numero: data.numero || '',
+        bairro: data.bairro || '',
+        municipio: data.municipio || '',
+        uf: data.uf || '',
+        cnae_fiscal_descricao: data.cnae_fiscal_descricao || ''
+      };
+      return res.json(mapped);
     } catch (error: any) {
       console.warn('Erro ao consultar CNPJ no BrasilAPI, tentando backup:', error.message);
       
@@ -136,7 +150,7 @@ async function startServer() {
   // Send sales order copy via email
   app.post('/api/email/send', async (req, res) => {
     try {
-      const { to, subject, body } = req.body;
+      const { to, subject, body, attachment, attachmentName } = req.body;
       if (!to || !subject || !body) {
         return res.status(400).json({ error: 'Os campos "to", "subject" e "body" são obrigatórios.' });
       }
@@ -149,6 +163,7 @@ async function startServer() {
       console.log(`Destinatário: ${to}`);
       console.log(`Assunto: ${subject}`);
       console.log(`Gmail configurado: ${gmailUser ? 'Sim' : 'Não'}`);
+      console.log(`Anexo recebido: ${attachment ? 'Sim' : 'Não'} (${attachmentName || 'sem nome'})`);
       console.log(`========================================`);
 
       if (gmailUser && gmailPass) {
@@ -161,16 +176,28 @@ async function startServer() {
         });
 
         const fromName = process.env.SMTP_FROM_NAME || 'RepresentaPRO';
-        await transporter.sendMail({
+        const mailOptions: any = {
           from: `"${fromName}" <${gmailUser}>`,
           to,
           subject,
           text: body,
-        });
+        };
+
+        if (attachment) {
+          mailOptions.attachments = [
+            {
+              filename: attachmentName || 'pedido.pdf',
+              content: Buffer.from(attachment, 'base64'),
+              contentType: 'application/pdf',
+            }
+          ];
+        }
+
+        await transporter.sendMail(mailOptions);
 
         return res.json({ 
           success: true, 
-          message: 'Cópia do pedido enviada por e-mail via Gmail com sucesso!' 
+          message: 'Cópia do pedido enviada por e-mail com o anexo PDF!' 
         });
       } else {
         // No email credentials configured

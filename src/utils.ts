@@ -51,7 +51,21 @@ export const consultarCNPJ = async (rawCnpj: string): Promise<any> => {
   try {
     const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
     if (response.ok) {
-      return await response.json();
+      const data = await response.json();
+      return {
+        ...data,
+        razao_social: data.razao_social || data.razaoSocial || '',
+        nome_fantasia: data.nome_fantasia || data.nomeFantasia || data.razao_social || '',
+        telefone1: data.ddd_telefone_1 || data.telefone1 || '',
+        telefone2: data.ddd_telefone_2 || '',
+        email: data.email || '',
+        logradouro: data.logradouro || '',
+        numero: data.numero || '',
+        bairro: data.bairro || '',
+        municipio: data.municipio || '',
+        uf: data.uf || '',
+        cnae_fiscal_descricao: data.cnae_fiscal_descricao || ''
+      };
     }
   } catch (err) {
     console.warn('Falha na consulta direta à BrasilAPI. Tentando API de backup CNPJ.ws...', err);

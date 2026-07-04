@@ -89,7 +89,7 @@ export default function RepresentadasTab({
         ...prev,
         razaoSocial: data.razao_social || '',
         nomeFantasia: data.nome_fantasia || data.razao_social || '',
-        telefone: data.telefone1 || '',
+        telefone: [data.telefone1, data.telefone2].filter(Boolean).join(' / '),
         email: data.email || '',
         segmento: data.cnae_fiscal_descricao || data.atividade_principal?.[0]?.text || prev.segmento || ''
       }));
