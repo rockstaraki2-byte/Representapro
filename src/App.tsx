@@ -47,7 +47,9 @@ import {
   saveUsuario,
   deleteUsuario,
   getMeta,
-  saveMeta
+  saveMeta,
+  db,
+  testarConexaoFirebase
 } from './firebase';
 
 // Import Subcomponents
@@ -404,6 +406,21 @@ export default function App() {
               <strong className="text-slate-800 font-extrabold">{filteredClientes.length} lojistas</strong>
             </div>
             
+            <button
+              onClick={async () => {
+                try {
+                  const docId = await testarConexaoFirebase(currentUser?.email);
+                  alert(`Sucesso! Conectado ao Firestore "representapro-b84c3".\nDocumento criado na coleção "teste_conexao" com o ID: ${docId}`);
+                } catch (err: any) {
+                  alert(`Erro ao conectar ao Firestore: ${err.message}`);
+                }
+              }}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shadow-sm shadow-emerald-200"
+              title="Testar Conexão Firebase"
+            >
+              <span>Testar Firebase</span>
+            </button>
+
             <button
               onClick={() => {
                 setIsAuthenticated(false);

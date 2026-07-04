@@ -6,7 +6,8 @@ import {
   getDocs, 
   setDoc, 
   deleteDoc, 
-  writeBatch 
+  writeBatch,
+  addDoc
 } from 'firebase/firestore';
 import { 
   Representada, 
@@ -28,23 +29,19 @@ import {
 } from './data';
 import firebaseConfig from '../firebase-applet-config.json';
 
-// Use environment variables if set, otherwise fallback to the default applet config
-const env = (import.meta as any).env || {};
-const finalFirebaseConfig = env.VITE_FIREBASE_API_KEY 
-  ? {
-      apiKey: env.VITE_FIREBASE_API_KEY,
-      authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
-      projectId: env.VITE_FIREBASE_PROJECT_ID,
-      storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
-      messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-      appId: env.VITE_FIREBASE_APP_ID,
-      firestoreDatabaseId: env.VITE_FIREBASE_DATABASE_ID || '(default)'
-    }
-  : firebaseConfig;
+const finalFirebaseConfig = {
+  apiKey: "AIzaSyBF2sweJQHuc_I3S71dPjw0_5pEUQOzuu8",
+  authDomain: "representapro-b84c3.firebaseapp.com",
+  projectId: "representapro-b84c3",
+  storageBucket: "representapro-b84c3.firebasestorage.app",
+  messagingSenderId: "948207221757",
+  appId: "1:948207221757:web:be1da69bbe4490076af794",
+  measurementId: "G-K4P1RYCKW5"
+};
 
 // Initialize Firebase
 const app = initializeApp(finalFirebaseConfig);
-export const db = getFirestore(app, finalFirebaseConfig.firestoreDatabaseId);
+export const db = getFirestore(app);
 
 export enum OperationType {
   CREATE = 'create',
@@ -316,5 +313,19 @@ export async function saveMeta(metaVal: MetaVendas): Promise<void> {
     await setDoc(doc(db, 'meta', 'meta-global'), metaVal);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, 'meta/meta-global');
+  }
+}
+
+export async function testarConexaoFirebase(usuarioEmail?: string): Promise<string> {
+  try {
+    const docRef = await addDoc(collection(db, 'teste_conexao'), {
+      data: new Date().toISOString(),
+      mensagem: 'Conexão efetuada com sucesso a partir do RepresentaPRO',
+      usuario: usuarioEmail || 'Anonimo'
+    });
+    return docRef.id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, 'teste_conexao');
+    throw error;
   }
 }
