@@ -1,0 +1,177 @@
+import express from 'express';
+import { createServer as createViteServer } from 'vite';
+import { GoogleGenAI } from '@google/genai';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+async function startServer() {
+  const app = express();
+  app.use(express.json());
+
+  // Lazy-loaded Gemini Client helper
+  let aiClient: GoogleGenAI | null = null;
+  function getGeminiClient(): GoogleGenAI {
+    if (!aiClient) {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error('GEMINI_API_KEY environment variable is required but was not found.');
+      }
+      aiClient = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          },
+        },
+      });
+    }
+    return aiClient;
+  }
+
+  // --- API Endpoints ---
+
+  // Main Gemini endpoint for writing assistance and content generation
+  app.post('/api/gemini/generate', async (req, res) => {
+    try {
+      const { prompt, systemInstruction, temperature, responseMimeType, responseSchema } = req.body;
+      
+      if (!prompt) {
+        return res.status(400).json({ error: 'Prompt is required' });
+      }
+
+      const ai = getGeminiClient();
+
+      // Configure generation parameters
+      const config: any = {
+        systemInstruction: systemInstruction || "You are a helpful, creative literary writing assistant.",
+        temperature: temperature !== undefined ? temperature : 0.7,
+      };
+
+      if (responseMimeType) {
+        config.responseMimeType = responseMimeType;
+      }
+      if (responseSchema) {
+        config.responseSchema = responseSchema;
+      }
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.5-flash',
+        contents: prompt,
+        config,
+      });
+
+      const text = response.text;
+      return res.json({ text });
+    } catch (error: any) {
+      console.error('Gemini API Error:', error);
+      return res.status(500).json({ 
+        error: error.message || 'An error occurred during content generation.' 
+      });
+    }
+  });
+
+  // Proxy CNPJ queries directly to BrasilAPI (Receita Federal)
+  app.get('/api/cnpj/:cnpj', async (req, res) => {
+    try {
+      const cnpj = req.params.cnpj.replace(/\D/g, '');
+      if (cnpj.length !== 14) {
+        return res.status(400).json({ error: 'CNPJ inválido. Deve conter exatamente 14 dígitos.' });
+      }
+
+      console.log(`Buscando CNPJ: ${cnpj} no BrasilAPI...`);
+      const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+      
+      if (!response.ok) {
+        throw new Error(`BrasilAPI retornou status ${response.status}`);
+      }
+
+      const data = await response.json();
+      return res.json(data);
+    } catch (error: any) {
+      console.warn('Erro ao consultar CNPJ no BrasilAPI, tentando backup:', error.message);
+      
+      // Fallback API: CNPJ.ws
+      try {
+        const cnpj = req.params.cnpj.replace(/\D/g, '');
+        const backupResponse = await fetch(`https://publica.cnpj.ws/cnpj/${cnpj}`);
+        if (backupResponse.ok) {
+          const backupData = await backupResponse.json();
+          // Map to BrasilAPI-like structure so the frontend can read it transparently
+          const mapped = {
+            cnpj: backupData.cnpj,
+            razao_social: backupData.razao_social,
+            nome_fantasia: backupData.estabelecimento.nome_fantasia || backupData.razao_social,
+            telefone1: (backupData.estabelecimento.ddd1 && backupData.estabelecimento.telefone1) 
+              ? `${backupData.estabelecimento.ddd1}${backupData.estabelecimento.telefone1}` 
+              : '',
+            email: backupData.estabelecimento.email || '',
+            logradouro: backupData.estabelecimento.logradouro || '',
+            numero: backupData.estabelecimento.numero || '',
+            bairro: backupData.estabelecimento.bairro || '',
+            municipio: backupData.estabelecimento.cidade?.nome || '',
+            uf: backupData.estabelecimento.estado?.sigla || '',
+            cnae_fiscal_descricao: backupData.estabelecimento.atividade_principal?.descricao || ''
+          };
+          console.log('CNPJ retornado com sucesso da API de Backup.');
+          return res.json(mapped);
+        }
+      } catch (backupError: any) {
+        console.error('Erro no backup CNPJ:', backupError.message);
+      }
+
+      return res.status(500).json({ 
+        error: 'Erro ao buscar o CNPJ na Receita Federal. Por favor, verifique o número ou tente preencher manualmente.' 
+      });
+    }
+  });
+
+  // --- Serve Frontend ---
+  
+  if (process.env.NODE_ENV === 'production') {
+    // Serve static files from the built dist/ directory
+    app.use(express.static(path.resolve(__dirname, 'dist')));
+    
+    // Fallback to index.html for Single Page Applications (SPA)
+    app.get('*', (req, res) => {
+      res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
+    });
+  } else {
+    // Vite Dev Server middleware mode
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'custom',
+    });
+
+    app.use(vite.middlewares);
+
+    app.get('*', async (req, res, next) => {
+      const url = req.originalUrl;
+      try {
+        let template = fs.readFileSync(path.resolve(__dirname, 'index.html'), 'utf-8');
+        // Apply Vite HTML transforms (injects HMR client if enabled, styling, etc.)
+        template = await vite.transformIndexHtml(url, template);
+        res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+      } catch (error) {
+        vite.ssrFixStacktrace(error as Error);
+        next(error);
+      }
+    });
+  }
+
+  const port = 3000;
+  app.listen(port, '0.0.0.0', () => {
+    console.log(`Server is running at http://0.0.0.0:${port}`);
+  });
+}
+
+startServer().catch((err) => {
+  console.error('Failed to start full-stack server:', err);
+  process.exit(1);
+});

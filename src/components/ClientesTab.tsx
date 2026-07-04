@@ -1,0 +1,521 @@
+import React, { useState } from 'react';
+import { Cliente, Pedido } from '../types';
+import { formatarCNPJ, formatarMoeda, formatarTelefone } from '../utils';
+import { 
+  Plus, 
+  Edit3, 
+  Trash2, 
+  Search, 
+  User, 
+  MapPin, 
+  Phone, 
+  Mail, 
+  Landmark, 
+  ChevronDown, 
+  ChevronUp, 
+  Loader2 
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+
+interface ClientesTabProps {
+  clientes: Cliente[];
+  pedidos: Pedido[];
+  onAdd: (cli: Cliente) => void;
+  onEdit: (cli: Cliente) => void;
+  onDelete: (id: string) => void;
+}
+
+export default function ClientesTab({
+  clientes,
+  pedidos,
+  onAdd,
+  onEdit,
+  onDelete,
+}: ClientesTabProps) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isFormExpanded, setIsFormExpanded] = useState(false);
+  const [isSearchingCnpj, setIsSearchingCnpj] = useState(false);
+
+  const [form, setForm] = useState<Partial<Cliente>>({
+    nomeFantasia: '',
+    razaoSocial: '',
+    cnpj: '',
+    endereco: '',
+    cidade: '',
+    uf: '',
+    telefone: '',
+    email: '',
+    contato: '',
+  });
+
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  const resetForm = () => {
+    setForm({
+      nomeFantasia: '',
+      razaoSocial: '',
+      cnpj: '',
+      endereco: '',
+      cidade: '',
+      uf: '',
+      telefone: '',
+      email: '',
+      contato: '',
+    });
+    setEditingId(null);
+    setValidationError(null);
+  };
+
+  const handleEditClick = (cli: Cliente) => {
+    setForm(cli);
+    setEditingId(cli.id);
+    setValidationError(null);
+    setIsFormExpanded(true); // Auto-expand when editing
+  };
+
+  const handleCnpjLookup = async () => {
+    const rawCnpj = (form.cnpj || '').replace(/\D/g, '');
+    if (rawCnpj.length !== 14) {
+      setValidationError('Insira um CNPJ com 14 dígitos numéricos para efetuar a busca automatizada.');
+      return;
+    }
+
+    setIsSearchingCnpj(true);
+    setValidationError(null);
+    try {
+      const response = await fetch(`/api/cnpj/${rawCnpj}`);
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Não foi possível encontrar este CNPJ ou serviço instável.');
+      }
+      
+      const data = await response.json();
+      
+      // Map retrieved values to Form
+      setForm(prev => ({
+        ...prev,
+        razaoSocial: data.razao_social || '',
+        nomeFantasia: data.nome_fantasia || data.razao_social || '',
+        telefone: data.telefone1 || '',
+        email: data.email || '',
+        endereco: (data.logradouro ? `${data.logradouro}, ${data.numero || 'S/N'}${data.bairro ? ` - ${data.bairro}` : ''}` : '') || prev.endereco || '',
+        cidade: data.municipio || '',
+        uf: data.uf || '',
+      }));
+
+      // Set success message
+      setValidationError('✓ CNPJ localizado com sucesso! Dados do cliente preenchidos automaticamente.');
+      setTimeout(() => setValidationError(null), 5000);
+    } catch (err: any) {
+      console.error('Erro na consulta CNPJ:', err);
+      setValidationError(err.message || 'Erro ao conectar no banco da Receita Federal. Tente preencher manualmente.');
+    } finally {
+      setIsSearchingCnpj(false);
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!form.nomeFantasia?.trim() || !form.razaoSocial?.trim() || !form.cnpj?.trim()) {
+      setValidationError('Por favor, preencha os campos obrigatórios (Nome Fantasia, Razão Social e CNPJ).');
+      return;
+    }
+
+    const cleanedCnpj = form.cnpj.replace(/\D/g, '');
+    if (cleanedCnpj.length !== 14) {
+      setValidationError('O CNPJ deve conter exatamente 14 dígitos numéricos.');
+      return;
+    }
+
+    if (form.uf && form.uf.trim().length !== 2) {
+      setValidationError('A sigla do Estado (UF) deve ter exatamente 2 caracteres.');
+      return;
+    }
+
+    const finalForm: Cliente = {
+      id: editingId || `cli-${Date.now()}`,
+      nomeFantasia: form.nomeFantasia.trim(),
+      razaoSocial: form.razaoSocial.trim(),
+      cnpj: formatarCNPJ(cleanedCnpj),
+      endereco: form.endereco?.trim() || '',
+      cidade: form.cidade?.trim() || '',
+      uf: (form.uf?.trim() || '').toUpperCase(),
+      telefone: form.telefone?.trim() || '',
+      email: form.email?.trim() || '',
+      contato: form.contato?.trim() || '',
+    };
+
+    if (editingId) {
+      onEdit(finalForm);
+    } else {
+      onAdd(finalForm);
+    }
+
+    resetForm();
+    setIsFormExpanded(false); // Collapsed on success
+  };
+
+  const handleDeleteClick = (id: string, name: string) => {
+    const vinculados = pedidos.filter(p => p.clienteId === id);
+    if (vinculados.length > 0) {
+      alert(`Não é possível excluir o cliente "${name}" porque ele possui ${vinculados.length} pedido(s) associado(s). Remova ou altere os pedidos primeiro.`);
+      return;
+    }
+
+    if (confirm(`Tem certeza que deseja remover o cliente "${name}" da carteira?`)) {
+      onDelete(id);
+    }
+  };
+
+  // Filter clients based on search query
+  const clientesFiltrados = clientes.filter(c => {
+    const query = searchQuery.toLowerCase();
+    return (
+      c.nomeFantasia.toLowerCase().includes(query) ||
+      c.razaoSocial.toLowerCase().includes(query) ||
+      c.cnpj.includes(query) ||
+      c.cidade.toLowerCase().includes(query) ||
+      c.uf.toLowerCase().includes(query)
+    );
+  });
+
+  return (
+    <div className="space-y-6">
+      
+      {/* Top action bar to trigger new client modal */}
+      <div className="flex justify-between items-center bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2.5 bg-emerald-50 text-emerald-700 rounded-lg shrink-0">
+            <User className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="font-serif font-bold text-sm text-slate-800">Carteira de Clientes</h3>
+            <p className="text-[11px] text-slate-400">Gerencie os compradores parceiros e suas informações de faturamento.</p>
+          </div>
+        </div>
+        <button
+          onClick={() => { resetForm(); setIsFormExpanded(true); }}
+          className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm shadow-emerald-100"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Novo Cliente</span>
+        </button>
+      </div>
+
+      <AnimatePresence>
+        {isFormExpanded && (
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-4xl w-full overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              {/* Modal Header */}
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 shrink-0">
+                <div className="flex items-center gap-2 text-emerald-800">
+                  <User className="w-5 h-5 text-emerald-600" />
+                  <h3 className="font-serif font-bold text-base text-slate-800">
+                    {editingId ? 'Editar Dados do Cliente' : 'Adicionar Novo Cliente à Carteira'}
+                  </h3>
+                </div>
+                <button 
+                  onClick={() => setIsFormExpanded(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 cursor-pointer transition-colors"
+                >
+                  <span className="font-bold text-lg">&times;</span>
+                </button>
+              </div>
+
+              {/* Modal Body (Scrollable) */}
+              <div className="p-6 overflow-y-auto space-y-4 text-xs">
+                {validationError && (
+                  <div className={`p-3 rounded-lg text-xs font-medium border ${
+                    validationError.startsWith('✓') 
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
+                      : 'bg-red-50 text-red-700 border-red-100'
+                  }`}>
+                    {validationError}
+                  </div>
+                )}
+
+                <form onSubmit={handleSubmit} id="cli-form-elem" className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    
+                    {/* CNPJ com Busca */}
+                    <div className="space-y-1 md:col-span-1">
+                      <label className="block text-xs font-mono uppercase text-slate-500">
+                        CNPJ do Cliente <span className="text-red-500">*</span>
+                      </label>
+                      <div className="flex gap-2">
+                        <input 
+                          type="text"
+                          placeholder="00.000.000/0000-00"
+                          value={form.cnpj || ''}
+                          onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
+                          className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-850 font-mono"
+                        />
+                        <button
+                          type="button"
+                          disabled={isSearchingCnpj}
+                          onClick={handleCnpjLookup}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1 shrink-0 cursor-pointer disabled:bg-slate-300"
+                          title="Buscar dados do CNPJ na Receita Federal"
+                        >
+                          {isSearchingCnpj ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Search className="w-3.5 h-3.5" />
+                          )}
+                          <span>Buscar</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Nome Fantasia */}
+                    <div className="space-y-1">
+                      <label className="block text-xs font-mono uppercase text-slate-500">Nome Fantasia / Comercial <span className="text-red-500">*</span></label>
+                      <input 
+                        type="text"
+                        placeholder="Ex: Comercial Silva"
+                        value={form.nomeFantasia || ''}
+                        onChange={(e) => setForm({ ...form, nomeFantasia: e.target.value })}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-xs focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-800 font-bold"
+                      />
+                    </div>
+
+                    {/* Razão Social */}
+                    <div className="space-y-1">
+                      <label className="block text-xs font-mono uppercase text-slate-500">Razão Social / Nome de Registro <span className="text-red-500">*</span></label>
+                      <input 
+                        type="text"
+                        placeholder="Ex: Silva Supermercados Eireli"
+                        value={form.razaoSocial || ''}
+                        onChange={(e) => setForm({ ...form, razaoSocial: e.target.value })}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-xs focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-805"
+                      />
+                    </div>
+
+                    {/* Contato Responsável */}
+                    <div className="space-y-1">
+                      <label className="block text-xs font-mono uppercase text-slate-500">Contato (Comprador/Responsável)</label>
+                      <input 
+                        type="text"
+                        placeholder="Ex: Roberto (Gerente Geral)"
+                        value={form.contato || ''}
+                        onChange={(e) => setForm({ ...form, contato: e.target.value })}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-xs focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-800"
+                      />
+                    </div>
+
+                    {/* Telefone */}
+                    <div className="space-y-1">
+                      <label className="block text-xs font-mono uppercase text-slate-500">Telefone para Contato</label>
+                      <input 
+                        type="text"
+                        placeholder="(00) 00000-0000"
+                        value={form.telefone || ''}
+                        onChange={(e) => setForm({ ...form, telefone: e.target.value })}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-xs focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-800 font-mono"
+                      />
+                    </div>
+
+                    {/* E-mail */}
+                    <div className="space-y-1">
+                      <label className="block text-xs font-mono uppercase text-slate-500">E-mail para Faturamento</label>
+                      <input 
+                        type="email"
+                        placeholder="compras@comercialsilva.com"
+                        value={form.email || ''}
+                        onChange={(e) => setForm({ ...form, email: e.target.value })}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-xs focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-800"
+                      />
+                    </div>
+
+                    {/* Endereço */}
+                    <div className="space-y-1 md:col-span-2">
+                      <label className="block text-xs font-mono uppercase text-slate-500">Endereço Completo (Rua, Número, Bairro)</label>
+                      <input 
+                        type="text"
+                        placeholder="Ex: Av. das Palmeiras, 400 - Bairro Novo"
+                        value={form.endereco || ''}
+                        onChange={(e) => setForm({ ...form, endereco: e.target.value })}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-xs focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-800"
+                      />
+                    </div>
+
+                    {/* Cidade / UF */}
+                    <div className="space-y-1 grid grid-cols-3 gap-2">
+                      <div className="col-span-2">
+                        <label className="block text-xs font-mono uppercase text-slate-500">Cidade</label>
+                        <input 
+                          type="text"
+                          placeholder="Ex: São Paulo"
+                          value={form.cidade || ''}
+                          onChange={(e) => setForm({ ...form, cidade: e.target.value })}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-xs focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-800"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-mono uppercase text-slate-500">UF</label>
+                        <input 
+                          type="text"
+                          maxLength={2}
+                          placeholder="SP"
+                          value={form.uf || ''}
+                          onChange={(e) => setForm({ ...form, uf: e.target.value })}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-xs focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-800 font-bold text-center uppercase"
+                        />
+                      </div>
+                    </div>
+
+                  </div>
+                </form>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3 shrink-0">
+                <button 
+                  type="button"
+                  onClick={() => { resetForm(); setIsFormExpanded(false); }}
+                  className="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    const formElem = document.getElementById('cli-form-elem') as HTMLFormElement;
+                    if (formElem) formElem.requestSubmit();
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer"
+                >
+                  {editingId ? 'Salvar Alterações' : 'Adicionar Cliente'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Busca e Lista de Clientes */}
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <h4 className="font-serif font-bold text-base text-slate-700">Sua Carteira de Clientes ({clientesFiltrados.length})</h4>
+          
+          {/* Caixa de Busca */}
+          <div className="relative max-w-xs w-full">
+            <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+              <Search className="h-4 w-4 text-slate-400" />
+            </span>
+            <input
+              type="text"
+              placeholder="Buscar cliente, CNPJ ou UF..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-xs focus:outline-none focus:border-emerald-600 text-slate-800"
+            />
+          </div>
+        </div>
+
+        {clientesFiltrados.length === 0 ? (
+          <div className="p-8 text-center bg-white border border-slate-200 rounded-xl text-xs text-slate-400 italic">
+            Nenhum cliente correspondente encontrado. Adicione novos acima ou ajuste sua busca!
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {clientesFiltrados.map(cli => {
+              // Calculate specific client metrics
+              const clientPedidos = pedidos.filter(p => p.clienteId === cli.id && p.status !== 'Cancelado');
+              const totalComprado = clientPedidos.reduce((sum, p) => sum + p.valorTotal, 0);
+              const totalComissao = clientPedidos.reduce((sum, p) => sum + p.valorComissao, 0);
+
+              return (
+                <div key={cli.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between hover:shadow-md transition-all relative">
+                  
+                  <div className="space-y-3">
+                    {/* Header */}
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase font-mono tracking-wider text-slate-400">Cliente Carteira</span>
+                        <div className="flex items-center gap-1 text-[11px] text-slate-500 font-bold">
+                          <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span>{cli.cidade || 'Sem Cidade'}-{cli.uf || 'UF'}</span>
+                        </div>
+                      </div>
+                      <h5 className="font-serif font-bold text-base text-slate-800 leading-tight mt-1">{cli.nomeFantasia}</h5>
+                      <p className="text-[10px] text-slate-400 mt-0.5 font-mono">{cli.cnpj}</p>
+                    </div>
+
+                    <div className="border-t border-dashed border-slate-100 pt-2.5 space-y-1.5 text-xs text-slate-600">
+                      <p className="font-semibold text-[10px] text-slate-400 uppercase tracking-wide">Razão Social</p>
+                      <p className="text-slate-700 font-serif font-bold text-[11px] leading-tight">{cli.razaoSocial}</p>
+                      
+                      {cli.endereco && (
+                        <p className="text-[11px] text-slate-500 italic mt-0.5">{cli.endereco}</p>
+                      )}
+
+                      {cli.contato && (
+                        <div className="flex items-center gap-1.5 text-[11px] text-slate-600 mt-2">
+                          <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span>Comprador: <strong>{cli.contato}</strong></span>
+                        </div>
+                      )}
+
+                      {cli.telefone && (
+                        <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                          <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span className="font-mono">{formatarTelefone(cli.telefone)}</span>
+                        </div>
+                      )}
+
+                      {cli.email && (
+                        <div className="flex items-center gap-1.5 text-[11px] text-slate-500 overflow-hidden text-ellipsis whitespace-nowrap">
+                          <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span>{cli.email}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Finance Stats */}
+                  <div className="mt-4 pt-3 border-t border-slate-100 bg-slate-50/50 -mx-5 -mb-5 px-5 py-4 rounded-b-xl flex items-center justify-between">
+                    <div className="font-mono text-[10px]">
+                      <span className="text-slate-400 block uppercase tracking-wider">Histórico de Compras</span>
+                      <strong className="text-slate-700 text-xs">{formatarMoeda(totalComprado)}</strong>
+                    </div>
+                    <div className="text-right font-mono text-[10px]">
+                      <span className="text-slate-400 block uppercase tracking-wider">Comissão Acumulada</span>
+                      <strong className="text-emerald-700 text-xs">{formatarMoeda(totalComissao)}</strong>
+                    </div>
+                  </div>
+
+                  {/* Actions overlay panel */}
+                  <div className="absolute right-3 bottom-14 flex items-center gap-1.5 bg-white border border-slate-100 p-1 rounded-lg shadow-sm">
+                    <button 
+                      onClick={() => handleEditClick(cli)}
+                      className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-slate-50 rounded transition-colors cursor-pointer"
+                      title="Editar"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteClick(cli.id, cli.nomeFantasia)}
+                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors cursor-pointer"
+                      title="Excluir"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
