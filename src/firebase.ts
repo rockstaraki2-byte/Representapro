@@ -277,9 +277,27 @@ export async function deleteEmpresa(id: string): Promise<void> {
 export async function getUsuarios(): Promise<Usuario[]> {
   try {
     const snap = await getDocs(collection(db, 'usuarios'));
-    const list = snap.docs.map(doc => doc.data() as Usuario);
-    const raulExists = list.some(u => u.id === 'usr-raul' || u.nome?.toLowerCase() === 'raul' || u.email === 'raul');
-    if (!raulExists) {
+    const list = snap.docs.map(doc => {
+      const u = doc.data() as Usuario;
+      if (u.id === 'usr-raul' || u.nome?.toLowerCase() === 'raul' || u.email?.toLowerCase() === 'raul') {
+        const cleaned: Usuario = {
+          ...u,
+          id: 'usr-raul',
+          nome: 'Raul',
+          email: 'raul',
+          role: 'Administrador',
+          ativo: true,
+          senha: '230213'
+        };
+        // Remove representation ID if present
+        delete cleaned.empresaRepresentacaoId;
+        return cleaned;
+      }
+      return u;
+    });
+
+    const raulIdx = list.findIndex(u => u.id === 'usr-raul');
+    if (raulIdx === -1) {
       const raulUser: Usuario = {
         id: 'usr-raul',
         nome: 'Raul',
@@ -291,6 +309,10 @@ export async function getUsuarios(): Promise<Usuario[]> {
       // Use silent background save
       saveUsuario(raulUser).catch(err => console.warn("Erro ao salvar Raul no Firestore:", err));
       list.push(raulUser);
+    } else {
+      // Correct existing Raul if it was misconfigured
+      const correctRaul = list[raulIdx];
+      saveUsuario(correctRaul).catch(err => console.warn("Erro ao atualizar Raul no Firestore:", err));
     }
     return list;
   } catch (error) {
@@ -301,7 +323,20 @@ export async function getUsuarios(): Promise<Usuario[]> {
 
 export async function saveUsuario(usr: Usuario): Promise<void> {
   try {
-    await setDoc(doc(db, 'usuarios', usr.id), usr);
+    let cleanUser = { ...usr };
+    if (usr.id === 'usr-raul' || usr.nome?.toLowerCase() === 'raul' || usr.email?.toLowerCase() === 'raul') {
+      cleanUser = {
+        ...usr,
+        id: 'usr-raul',
+        nome: 'Raul',
+        email: 'raul',
+        role: 'Administrador',
+        ativo: true,
+        senha: '230213'
+      };
+      delete cleanUser.empresaRepresentacaoId;
+    }
+    await setDoc(doc(db, 'usuarios', cleanUser.id), cleanUser);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `usuarios/${usr.id}`);
   }

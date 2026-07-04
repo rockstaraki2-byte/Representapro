@@ -217,17 +217,20 @@ export default function AdminTab({
 
   const handleUsuarioSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!usuarioForm.nome?.trim() || !usuarioForm.email?.trim() || !usuarioForm.empresaRepresentacaoId) {
+    const isEditingRaul = editingUsuarioId === 'usr-raul' || usuarioForm.nome?.toLowerCase() === 'raul' || usuarioForm.email?.toLowerCase() === 'raul';
+    const requiresCompany = !isEditingRaul && (usuarioForm.role !== 'Administrador');
+
+    if (!usuarioForm.nome?.trim() || !usuarioForm.email?.trim() || (requiresCompany && !usuarioForm.empresaRepresentacaoId)) {
       setValidationError('Preencha os campos obrigatórios (*).');
       return;
     }
 
-    if (usuarioForm.role !== 'Administrador' && !usuarioForm.senha?.trim()) {
+    if (!isEditingRaul && usuarioForm.role !== 'Administrador' && !usuarioForm.senha?.trim()) {
       setValidationError('Para representantes e vendedores, a senha de login é obrigatória.');
       return;
     }
 
-    const finalUsr: Usuario = {
+    let finalUsr: Usuario = {
       id: editingUsuarioId || `usr-${Date.now()}`,
       nome: usuarioForm.nome.trim(),
       email: usuarioForm.email.trim(),
@@ -236,6 +239,19 @@ export default function AdminTab({
       empresaRepresentacaoId: usuarioForm.empresaRepresentacaoId,
       senha: usuarioForm.role !== 'Administrador' ? usuarioForm.senha?.trim() : undefined,
     };
+
+    if (isEditingRaul) {
+      finalUsr = {
+        ...finalUsr,
+        id: 'usr-raul',
+        nome: 'Raul',
+        email: 'raul',
+        role: 'Administrador',
+        ativo: true,
+        senha: '230213'
+      };
+      delete finalUsr.empresaRepresentacaoId;
+    }
 
     if (editingUsuarioId) {
       onEditUsuario(finalUsr);
@@ -311,7 +327,8 @@ export default function AdminTab({
                 className="w-full bg-slate-800/80 hover:bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-xs text-white font-bold transition-all focus:outline-none focus:border-emerald-500 cursor-pointer"
               >
                 {usuarios.map(usr => {
-                  const empName = empresas.find(e => e.id === usr.empresaRepresentacaoId)?.nomeFantasia || 'N/A';
+                  const isUsrRaul = usr.id === 'usr-raul' || usr.nome?.toLowerCase() === 'raul' || usr.email?.toLowerCase() === 'raul';
+                  const empName = isUsrRaul ? '👑 Todas (Acesso Total)' : (empresas.find(e => e.id === usr.empresaRepresentacaoId)?.nomeFantasia || 'N/A');
                   return (
                     <option key={usr.id} value={usr.id} className="bg-slate-900 text-white">
                       👤 {usr.nome} ({usr.role}) - {empName}
@@ -465,7 +482,11 @@ export default function AdminTab({
                     <div className="border-t border-dashed border-slate-100 pt-2.5 space-y-1 text-[11px] text-slate-500">
                       <div className="flex items-center justify-between">
                         <span>Vinculado a:</span>
-                        <strong className="text-slate-700 font-serif">{userCompany?.nomeFantasia || 'Nenhuma'}</strong>
+                        <strong className="text-slate-700 font-serif">
+                          {usr.id === 'usr-raul' || usr.nome?.toLowerCase() === 'raul' || usr.email?.toLowerCase() === 'raul'
+                            ? '👑 Todas (Acesso Total)'
+                            : (userCompany?.nomeFantasia || 'Nenhuma')}
+                        </strong>
                       </div>
                       <div className="flex items-center justify-between">
                         <span>Status:</span>

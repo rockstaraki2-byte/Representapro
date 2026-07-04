@@ -43,10 +43,12 @@ export default function LoginScreen({ usuarios, empresas, onLoginSuccess }: Logi
     setShowSuggestions(false);
     setError(null);
 
-    if (usr.empresaRepresentacaoId) {
+    const isRaul = usr.id === 'usr-raul' || usr.nome?.toLowerCase() === 'raul' || usr.email?.toLowerCase() === 'raul';
+    if (isRaul) {
+      setSelectedEmpresaId('all');
+    } else if (usr.empresaRepresentacaoId) {
       setSelectedEmpresaId(usr.empresaRepresentacaoId);
     } else {
-      // For Raul (or anyone without linked company), we default to the first company in the list
       setSelectedEmpresaId(empresas[0]?.id || '');
     }
   };
