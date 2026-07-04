@@ -250,3 +250,77 @@ export const SEED_PRODUTOS: Produto[] = [
   }
 ];
 
+export const SEED_EMPRESAS = [
+  {
+    id: 'emp-1',
+    nomeFantasia: 'Planalto Representações',
+    razaoSocial: 'Planalto Representações e Negócios Comerciais Ltda',
+    cnpj: '45.123.890/0001-44',
+    telefone: '(11) 98765-4321',
+    email: 'comercial@planalto.rep.br',
+    endereco: 'Av. Paulista, 1000 - Bela Vista',
+    cidade: 'São Paulo',
+    uf: 'SP',
+    isDefault: true
+  },
+  {
+    id: 'emp-2',
+    nomeFantasia: 'Vanguard Vendas',
+    razaoSocial: 'Vanguard Intermediação de Negócios S/A',
+    cnpj: '12.098.765/0001-09',
+    telefone: '(47) 3222-1111',
+    email: 'contato@vanguardvendas.com.br',
+    endereco: 'Rua XV de Novembro, 250 - Centro',
+    cidade: 'Blumenau',
+    uf: 'SC',
+    isDefault: false
+  }
+];
+
+export const SEED_USUARIOS = [
+  {
+    id: 'usr-1',
+    nome: 'André Gestor (Planalto)',
+    email: 'andre@planalto.rep.br',
+    role: 'Administrador' as const,
+    ativo: true,
+    empresaRepresentacaoId: 'emp-1'
+  },
+  {
+    id: 'usr-2',
+    nome: 'Bruno Vendedor (Planalto)',
+    email: 'bruno@planalto.rep.br',
+    role: 'Vendedor' as const,
+    ativo: true,
+    empresaRepresentacaoId: 'emp-1',
+    senha: '123456'
+  },
+  {
+    id: 'usr-3',
+    nome: 'Carla Representante (Planalto)',
+    email: 'carla@planalto.rep.br',
+    role: 'Representante' as const,
+    ativo: true,
+    empresaRepresentacaoId: 'emp-1',
+    senha: '123456'
+  },
+  {
+    id: 'usr-4',
+    nome: 'Daniel Gestor (Vanguard)',
+    email: 'daniel@vanguardvendas.com.br',
+    role: 'Administrador' as const,
+    ativo: true,
+    empresaRepresentacaoId: 'emp-2'
+  },
+  {
+    id: 'usr-5',
+    nome: 'Eduardo Vendedor (Vanguard)',
+    email: 'eduardo@vanguardvendas.com.br',
+    role: 'Vendedor' as const,
+    ativo: true,
+    empresaRepresentacaoId: 'emp-2',
+    senha: '123456'
+  }
+];
+
+

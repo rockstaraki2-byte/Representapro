@@ -15,9 +15,12 @@ import {
   X,
   ArrowRight,
   TrendingDown,
-  AlertCircle
+  AlertCircle,
+  Printer,
+  SlidersHorizontal
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { gerarDashboardPDF } from '../lib/pdfGenerator';
 
 interface DashboardTabProps {
   pedidos: Pedido[];
@@ -25,8 +28,9 @@ interface DashboardTabProps {
   representadas: Representada[];
   meta: MetaVendas;
   setMeta: (meta: MetaVendas) => void;
-  onNavigateToTab: (tab: 'dashboard' | 'representadas' | 'clientes' | 'pedidos' | 'ai') => void;
+  onNavigateToTab: (tab: 'dashboard' | 'representadas' | 'clientes' | 'pedidos' | 'produtos' | 'admin') => void;
   onEditPedido: (pedido: Pedido) => void;
+  empresaRepresentacao?: any;
 }
 
 export default function DashboardTab({
@@ -37,24 +41,42 @@ export default function DashboardTab({
   setMeta,
   onNavigateToTab,
   onEditPedido,
+  empresaRepresentacao,
 }: DashboardTabProps) {
   const [editingMeta, setEditingMeta] = useState(false);
   const [tempMetaValor, setTempMetaValor] = useState(meta.metaMensal.toString());
   const [activeModal, setActiveModal] = useState<'vendas' | 'comissoes_totais' | 'comissoes_recebidas' | 'clientes' | null>(null);
 
-  // Filter out canceled orders for totals
-  const pedidosValidos = pedidos.filter(p => p.status !== 'Cancelado');
+  // Filtros do Dashboard
+  const [filterRepresentada, setFilterRepresentada] = useState('Todos');
+  const [filterCliente, setFilterCliente] = useState('Todos');
+  const [filterStatus, setFilterStatus] = useState('Todos');
+  const [filterDataDe, setFilterDataDe] = useState('');
+  const [filterDataAte, setFilterDataAte] = useState('');
+
+  // Pedidos Filtrados Dinamicamente
+  const pedidosFiltrados = pedidos.filter(p => {
+    if (filterRepresentada !== 'Todos' && p.representadaId !== filterRepresentada) return false;
+    if (filterCliente !== 'Todos' && p.clienteId !== filterCliente) return false;
+    if (filterStatus !== 'Todos' && p.status !== filterStatus) return false;
+    if (filterDataDe && p.dataPedido < filterDataDe) return false;
+    if (filterDataAte && p.dataPedido > filterDataAte) return false;
+    return true;
+  });
+
+  // Filtro de pedidos válidos para faturamento (Exclui cancelados a menos que o status Cancelado esteja filtrado)
+  const pedidosValidos = pedidosFiltrados.filter(p => p.status !== 'Cancelado' || filterStatus === 'Cancelado');
 
   const faturamentoTotal = pedidosValidos.reduce((acc, p) => acc + p.valorTotal, 0);
   const comissaoTotal = pedidosValidos.reduce((acc, p) => acc + p.valorComissao, 0);
   
   // Commissions received (Status 'Pago')
-  const comissaoRecebida = pedidos
+  const comissaoRecebida = pedidosFiltrados
     .filter(p => p.status === 'Pago')
     .reduce((acc, p) => acc + p.valorComissao, 0);
 
   // Commissions pending (Status 'Faturado' or 'Pendente')
-  const comissaoPendente = pedidos
+  const comissaoPendente = pedidosFiltrados
     .filter(p => p.status === 'Faturado' || p.status === 'Pendente')
     .reduce((acc, p) => acc + p.valorComissao, 0);
 
@@ -77,13 +99,13 @@ export default function DashboardTab({
     }
   };
 
-  // Group faturamento by represented brand for chart
+  // Group faturamento by represented brand for chart (recalculated based on active filters!)
   const faturamentoPorRepresentada = representadas.map(rep => {
-    const totalVendas = pedidos
-      .filter(p => p.representadaId === rep.id && p.status !== 'Cancelado')
+    const totalVendas = pedidosFiltrados
+      .filter(p => p.representadaId === rep.id && (p.status !== 'Cancelado' || filterStatus === 'Cancelado'))
       .reduce((acc, p) => acc + p.valorTotal, 0);
-    const totalComissao = pedidos
-      .filter(p => p.representadaId === rep.id && p.status !== 'Cancelado')
+    const totalComissao = pedidosFiltrados
+      .filter(p => p.representadaId === rep.id && (p.status !== 'Cancelado' || filterStatus === 'Cancelado'))
       .reduce((acc, p) => acc + p.valorComissao, 0);
     
     return {
@@ -98,6 +120,121 @@ export default function DashboardTab({
 
   return (
     <div className="space-y-6">
+      {/* Filtros Executivos */}
+      <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <SlidersHorizontal className="w-5 h-5 text-emerald-600" />
+            <h2 className="font-serif font-bold text-base text-slate-800">Filtros do Painel Geral</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            {/* Clear filters button if any is active */}
+            {(filterRepresentada !== 'Todos' || filterCliente !== 'Todos' || filterStatus !== 'Todos' || filterDataDe || filterDataAte) && (
+              <button
+                onClick={() => {
+                  setFilterRepresentada('Todos');
+                  setFilterCliente('Todos');
+                  setFilterStatus('Todos');
+                  setFilterDataDe('');
+                  setFilterDataAte('');
+                }}
+                className="text-xs text-red-600 hover:text-red-700 hover:underline px-2.5 py-1 rounded-lg cursor-pointer font-bold"
+              >
+                Limpar Filtros
+              </button>
+            )}
+            {/* Print Dashboard PDF Button */}
+            <button
+              onClick={() => {
+                gerarDashboardPDF(pedidos, clientes, representadas, {
+                  representadaId: filterRepresentada,
+                  clienteId: filterCliente,
+                  status: filterStatus,
+                  dataDe: filterDataDe,
+                  dataAte: filterDataAte
+                }, empresaRepresentacao);
+              }}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-sm shadow-emerald-100"
+            >
+              <Printer className="w-4 h-4" />
+              <span>Imprimir Relatório (PDF)</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Inputs Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3.5 text-xs text-slate-500">
+          {/* Representada */}
+          <div className="space-y-1">
+            <label className="block text-[10px] font-mono uppercase tracking-wider">Representada / Fábrica</label>
+            <select
+              value={filterRepresentada}
+              onChange={(e) => setFilterRepresentada(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-750 focus:outline-none focus:border-emerald-600 cursor-pointer"
+            >
+              <option value="Todos">Todas as Fábricas</option>
+              {representadas.map(r => (
+                <option key={r.id} value={r.id}>{r.nomeFantasia}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Cliente */}
+          <div className="space-y-1">
+            <label className="block text-[10px] font-mono uppercase tracking-wider">Cliente (Comprador)</label>
+            <select
+              value={filterCliente}
+              onChange={(e) => setFilterCliente(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-750 focus:outline-none focus:border-emerald-600 cursor-pointer"
+            >
+              <option value="Todos">Todos os Clientes</option>
+              {clientes.map(c => (
+                <option key={c.id} value={c.id}>{c.nomeFantasia}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Status */}
+          <div className="space-y-1">
+            <label className="block text-[10px] font-mono uppercase tracking-wider">Status do Pedido</label>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-750 focus:outline-none focus:border-emerald-600 cursor-pointer font-bold"
+            >
+              <option value="Todos">Todos os Status</option>
+              <option value="Rascunho">Rascunho</option>
+              <option value="Pendente">Pendente</option>
+              <option value="Faturado">Faturado</option>
+              <option value="Pago">Comissão Recebida</option>
+              <option value="Cancelado">Cancelado</option>
+            </select>
+          </div>
+
+          {/* Data De */}
+          <div className="space-y-1">
+            <label className="block text-[10px] font-mono uppercase tracking-wider">Período (De)</label>
+            <input
+              type="date"
+              value={filterDataDe}
+              onChange={(e) => setFilterDataDe(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-750 focus:outline-none focus:border-emerald-600 font-mono"
+            />
+          </div>
+
+          {/* Data Ate */}
+          <div className="space-y-1">
+            <label className="block text-[10px] font-mono uppercase tracking-wider">Período (Até)</label>
+            <input
+              type="date"
+              value={filterDataAte}
+              onChange={(e) => setFilterDataAte(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-750 focus:outline-none focus:border-emerald-600 font-mono"
+            />
+          </div>
+        </div>
+      </div>
+
       {/* Resumo de Metas */}
       <div className="bg-white rounded-xl border border-slate-200/80 p-6 shadow-sm">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
@@ -306,7 +443,7 @@ export default function DashboardTab({
 
           <div className="space-y-3.5 my-auto">
             {['Pago', 'Faturado', 'Pendente', 'Rascunho', 'Cancelado'].map(status => {
-              const filtrados = pedidos.filter(p => p.status === status);
+              const filtrados = pedidosFiltrados.filter(p => p.status === status);
               const totalMoeda = filtrados.reduce((sum, p) => sum + p.valorTotal, 0);
               const numPedidos = filtrados.length;
               
@@ -355,9 +492,9 @@ export default function DashboardTab({
         </div>
 
         <div className="overflow-x-auto">
-          {pedidos.length === 0 ? (
+          {pedidosFiltrados.length === 0 ? (
             <div className="text-center py-8 text-xs text-slate-400 italic">
-              Nenhum pedido cadastrado ainda. Clique em "Vendas" para começar a emitir!
+              Nenhum pedido atende aos filtros definidos.
             </div>
           ) : (
             <table className="w-full text-left text-xs border-collapse">
@@ -374,7 +511,7 @@ export default function DashboardTab({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {pedidos.slice(0, 5).map(p => {
+                {pedidosFiltrados.slice(0, 5).map(p => {
                   const cli = clientes.find(c => c.id === p.clienteId);
                   const rep = representadas.find(r => r.id === p.representadaId);
 

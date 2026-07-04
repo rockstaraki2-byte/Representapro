@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Cliente, Pedido } from '../types';
+import { Cliente, Pedido, Representada } from '../types';
 import { formatarCNPJ, formatarMoeda, formatarTelefone } from '../utils';
 import { 
   Plus, 
@@ -13,13 +13,16 @@ import {
   Landmark, 
   ChevronDown, 
   ChevronUp, 
-  Loader2 
+  Loader2,
+  X,
+  TrendingUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface ClientesTabProps {
   clientes: Cliente[];
   pedidos: Pedido[];
+  representadas: Representada[];
   onAdd: (cli: Cliente) => void;
   onEdit: (cli: Cliente) => void;
   onDelete: (id: string) => void;
@@ -28,6 +31,7 @@ interface ClientesTabProps {
 export default function ClientesTab({
   clientes,
   pedidos,
+  representadas,
   onAdd,
   onEdit,
   onDelete,
@@ -36,6 +40,7 @@ export default function ClientesTab({
   const [searchQuery, setSearchQuery] = useState('');
   const [isFormExpanded, setIsFormExpanded] = useState(false);
   const [isSearchingCnpj, setIsSearchingCnpj] = useState(false);
+  const [selectedClientHistory, setSelectedClientHistory] = useState<Cliente | null>(null);
 
   const [form, setForm] = useState<Partial<Cliente>>({
     nomeFantasia: '',
@@ -433,7 +438,11 @@ export default function ClientesTab({
               const totalComissao = clientPedidos.reduce((sum, p) => sum + p.valorComissao, 0);
 
               return (
-                <div key={cli.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between hover:shadow-md transition-all relative">
+                <div 
+                  key={cli.id} 
+                  onClick={() => setSelectedClientHistory(cli)}
+                  className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between hover:shadow-md hover:border-emerald-500/50 transition-all relative cursor-pointer"
+                >
                   
                   <div className="space-y-3">
                     {/* Header */}
@@ -493,16 +502,19 @@ export default function ClientesTab({
                   </div>
 
                   {/* Actions overlay panel */}
-                  <div className="absolute right-3 bottom-14 flex items-center gap-1.5 bg-white border border-slate-100 p-1 rounded-lg shadow-sm">
+                  <div 
+                    onClick={(e) => e.stopPropagation()} 
+                    className="absolute right-3 bottom-14 flex items-center gap-1.5 bg-white border border-slate-100 p-1 rounded-lg shadow-sm"
+                  >
                     <button 
-                      onClick={() => handleEditClick(cli)}
+                      onClick={(e) => { e.stopPropagation(); handleEditClick(cli); }}
                       className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-slate-50 rounded transition-colors cursor-pointer"
                       title="Editar"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
                     <button 
-                      onClick={() => handleDeleteClick(cli.id, cli.nomeFantasia)}
+                      onClick={(e) => { e.stopPropagation(); handleDeleteClick(cli.id, cli.nomeFantasia); }}
                       className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors cursor-pointer"
                       title="Excluir"
                     >
@@ -516,6 +528,193 @@ export default function ClientesTab({
           </div>
         )}
       </div>
+
+      {/* Modal de Histórico e Recorrência do Cliente */}
+      <AnimatePresence>
+        {selectedClientHistory && (() => {
+          const cli = selectedClientHistory;
+          const clientPedidos = pedidos.filter(p => p.clienteId === cli.id);
+          const activePedidos = clientPedidos.filter(p => p.status !== 'Cancelado');
+          const totalComprado = activePedidos.reduce((sum, p) => sum + p.valorTotal, 0);
+          const totalComissao = activePedidos.reduce((sum, p) => sum + p.valorComissao, 0);
+          
+          const sortedOrders = [...activePedidos].sort((a, b) => a.dataPedido.localeCompare(b.dataPedido));
+          let mediaDiasEntreCompras = 0;
+          if (sortedOrders.length >= 2) {
+            let totalDiffDays = 0;
+            for (let i = 1; i < sortedOrders.length; i++) {
+              const datePrev = new Date(sortedOrders[i - 1].dataPedido).getTime();
+              const dateCurr = new Date(sortedOrders[i].dataPedido).getTime();
+              const diffTime = Math.abs(dateCurr - datePrev);
+              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+              totalDiffDays += diffDays;
+            }
+            mediaDiasEntreCompras = Math.round(totalDiffDays / (sortedOrders.length - 1));
+          }
+
+          const ticketMedio = activePedidos.length > 0 ? totalComprado / activePedidos.length : 0;
+
+          // Recurrence labels
+          let recorrenciaLabel = "Iniciando";
+          let recorrenciaBadge = "text-slate-600 bg-slate-100 border-slate-200";
+          let recorrenciaDesc = "Apenas 1 pedido registrado. Recorrência em desenvolvimento conforme novas compras forem registradas.";
+
+          if (activePedidos.length === 0) {
+            recorrenciaLabel = "Sem Histórico";
+            recorrenciaBadge = "text-slate-400 bg-slate-50 border-slate-150";
+            recorrenciaDesc = "Este cliente ainda não realizou compras registradas no sistema.";
+          } else if (activePedidos.length >= 2) {
+            if (mediaDiasEntreCompras <= 30) {
+              recorrenciaLabel = "Excelente Recorrência";
+              recorrenciaBadge = "text-emerald-700 bg-emerald-50 border-emerald-200";
+              recorrenciaDesc = `Compra a cada ${mediaDiasEntreCompras} dias em média. Excelente frequência de abastecimento!`;
+            } else if (mediaDiasEntreCompras <= 60) {
+              recorrenciaLabel = "Boa Recorrência";
+              recorrenciaBadge = "text-blue-700 bg-blue-50 border-blue-200";
+              recorrenciaDesc = `Compra a cada ${mediaDiasEntreCompras} dias em média. Abastecimento bimestral saudável.`;
+            } else if (mediaDiasEntreCompras <= 90) {
+              recorrenciaLabel = "Recorrência Regular";
+              recorrenciaBadge = "text-amber-700 bg-amber-50 border-amber-200";
+              recorrenciaDesc = `Compra a cada ${mediaDiasEntreCompras} dias em média. Abastecimento trimestral regular.`;
+            } else {
+              recorrenciaLabel = "Recorrência Baixa / Sazonal";
+              recorrenciaBadge = "text-slate-700 bg-slate-100 border-slate-200";
+              recorrenciaDesc = `Compra a cada ${mediaDiasEntreCompras} dias em média. Compras espaçadas ou sazonais.`;
+            }
+          }
+
+          return (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 15 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 15 }}
+                className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-3xl w-full max-h-[85vh] overflow-hidden flex flex-col"
+              >
+                {/* Header */}
+                <div className="p-5 border-b border-slate-150 flex items-start justify-between bg-slate-50">
+                  <div>
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold">Histórico de Compras & Recorrência</span>
+                    <h3 className="font-serif font-bold text-lg text-slate-800 leading-tight mt-1">{cli.nomeFantasia}</h3>
+                    <p className="text-xs text-slate-500 font-mono mt-0.5">{cli.razaoSocial} | CNPJ: {cli.cnpj}</p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedClientHistory(null)}
+                    className="p-1.5 hover:bg-slate-200/80 rounded-lg text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Body Content */}
+                <div className="p-6 overflow-y-auto space-y-6">
+                  {/* Resumo cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-150 font-mono text-center">
+                      <span className="text-[9px] text-slate-400 block uppercase tracking-wider font-bold">Total Comprado</span>
+                      <strong className="text-slate-800 text-sm block mt-1">{formatarMoeda(totalComprado)}</strong>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-150 font-mono text-center">
+                      <span className="text-[9px] text-slate-400 block uppercase tracking-wider font-bold">Nº de Pedidos</span>
+                      <strong className="text-slate-800 text-sm block mt-1">{activePedidos.length}</strong>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-150 font-mono text-center">
+                      <span className="text-[9px] text-slate-400 block uppercase tracking-wider font-bold">Ticket Médio</span>
+                      <strong className="text-emerald-700 text-sm block mt-1">{formatarMoeda(ticketMedio)}</strong>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-150 font-mono text-center">
+                      <span className="text-[9px] text-slate-400 block uppercase tracking-wider font-bold">Comissão Total</span>
+                      <strong className="text-emerald-700 text-sm block mt-1">{formatarMoeda(totalComissao)}</strong>
+                    </div>
+                  </div>
+
+                  {/* Recorrência Metria */}
+                  <div className="bg-emerald-50/30 rounded-xl border border-emerald-100 p-4 space-y-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <h4 className="font-serif font-bold text-xs text-emerald-900 flex items-center gap-1.5 uppercase tracking-wider">
+                        <TrendingUp className="w-4 h-4 text-emerald-600" />
+                        Análise de Recorrência do Comprador
+                      </h4>
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${recorrenciaBadge}`}>
+                        {recorrenciaLabel}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      {recorrenciaDesc}
+                    </p>
+                  </div>
+
+                  {/* Histórico de Pedidos Table */}
+                  <div className="space-y-3">
+                    <h4 className="font-serif font-bold text-xs text-slate-700 uppercase tracking-wider">Histórico de Pedidos</h4>
+                    {clientPedidos.length === 0 ? (
+                      <div className="text-center py-8 text-xs text-slate-400 italic bg-slate-50/50 rounded-xl border border-slate-150">
+                        Nenhum pedido registrado para este cliente.
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-250 text-slate-400 uppercase font-mono tracking-wider text-[9px] font-bold">
+                              <th className="px-4 py-2.5">Código</th>
+                              <th className="px-4 py-2.5">Emissão</th>
+                              <th className="px-4 py-2.5">Representada / Fábrica</th>
+                              <th className="px-4 py-2.5 text-right">Valor Total</th>
+                              <th className="px-4 py-2.5 text-right">Comissão</th>
+                              <th className="px-4 py-2.5 text-center">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
+                            {[...clientPedidos]
+                              .sort((a, b) => b.dataPedido.localeCompare(a.dataPedido))
+                              .map(p => {
+                                const rep = representadas.find(r => r.id === p.representadaId);
+                                const badgeColor = 
+                                  p.status === 'Pago' ? 'text-emerald-700 bg-emerald-50 border-emerald-100' :
+                                  p.status === 'Faturado' ? 'text-blue-700 bg-blue-50 border-blue-100' :
+                                  p.status === 'Pendente' ? 'text-amber-700 bg-amber-50 border-amber-100' :
+                                  p.status === 'Rascunho' ? 'text-slate-600 bg-slate-50 border-slate-150' : 'text-red-700 bg-red-50 border-red-100';
+
+                                return (
+                                  <tr key={p.id} className="hover:bg-slate-50/30 transition-colors">
+                                    <td className="px-4 py-2.5 font-bold text-slate-800">#{p.numeroPedido}</td>
+                                    <td className="px-4 py-2.5 text-slate-500">{p.dataPedido.split('-').reverse().join('/')}</td>
+                                    <td className="px-4 py-2.5 text-slate-700 font-serif font-bold">
+                                      {rep ? rep.nomeFantasia : 'Fábrica'}
+                                    </td>
+                                    <td className="px-4 py-2.5 text-right text-slate-800 font-bold">{formatarMoeda(p.valorTotal)}</td>
+                                    <td className="px-4 py-2.5 text-right text-emerald-700 font-bold">
+                                      {formatarMoeda(p.valorComissao)}
+                                    </td>
+                                    <td className="px-4 py-2.5 text-center">
+                                      <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${badgeColor}`}>
+                                        {p.status}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="p-4 border-t border-slate-150 bg-slate-50 text-right">
+                  <button
+                    onClick={() => setSelectedClientHistory(null)}
+                    className="bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-all"
+                  >
+                    Fechar Histórico
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
+      </AnimatePresence>
     </div>
   );
 }

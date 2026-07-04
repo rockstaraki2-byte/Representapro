@@ -391,17 +391,22 @@ export default function RepresentadasTab({
               const totalComissao = repPedidos.reduce((sum, p) => sum + p.valorComissao, 0);
 
               return (
-                <div key={rep.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between hover:shadow-md transition-all">
+                <div key={rep.id} className="relative bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between hover:shadow-md transition-all">
                   <div className="space-y-3">
                     
                     {/* Header */}
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <span className="text-[9px] uppercase font-mono tracking-widest text-slate-400 block">{rep.segmento}</span>
-                        <h5 className="font-serif font-bold text-base text-slate-800 leading-tight">{rep.nomeFantasia}</h5>
-                        <p className="text-[10px] text-slate-400 mt-0.5 font-mono">{rep.cnpj}</p>
+                    <div className="flex items-start justify-between gap-2.5">
+                      <div className="flex items-start gap-2.5">
+                        <div className="w-10 h-10 bg-emerald-50 text-emerald-700 rounded flex items-center justify-center shrink-0">
+                          <Landmark className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <span className="text-[9px] uppercase font-mono tracking-widest text-slate-400 block">{rep.segmento}</span>
+                          <h5 className="font-serif font-bold text-sm text-slate-800 leading-tight">{rep.nomeFantasia}</h5>
+                          <p className="text-[10px] text-slate-400 mt-0.5 font-mono">{rep.cnpj}</p>
+                        </div>
                       </div>
-                      <span className="bg-emerald-50 text-emerald-800 text-xs font-mono font-bold px-2 py-1 rounded border border-emerald-100">
+                      <span className="bg-emerald-50 text-emerald-800 text-[10px] font-mono font-bold px-2 py-0.5 rounded border border-emerald-100 shrink-0">
                         {rep.comissaoPadrao}% comissão
                       </span>
                     </div>

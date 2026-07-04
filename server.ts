@@ -132,6 +132,33 @@ async function startServer() {
     }
   });
 
+  // Send sales order copy via email
+  app.post('/api/email/send', async (req, res) => {
+    try {
+      const { to, subject, body } = req.body;
+      if (!to || !subject || !body) {
+        return res.status(400).json({ error: 'Os campos "to", "subject" e "body" são obrigatórios.' });
+      }
+
+      console.log(`========================================`);
+      console.log(`[EMAIL SENDING SERVICE]`);
+      console.log(`Destinatário: ${to}`);
+      console.log(`Assunto: ${subject}`);
+      console.log(`Corpo do E-mail:\n${body}`);
+      console.log(`========================================`);
+
+      // Here you would integrate nodemailer or a third-party email provider
+      // using credentials in process.env.SMTP_HOST, SMTP_USER, etc.
+      return res.json({ 
+        success: true, 
+        message: 'Cópia do pedido enviada por e-mail com sucesso!' 
+      });
+    } catch (error: any) {
+      console.error('Erro ao processar envio de e-mail:', error);
+      return res.status(500).json({ error: error.message || 'Erro interno ao processar o e-mail.' });
+    }
+  });
+
   // --- Serve Frontend ---
   
   if (process.env.NODE_ENV === 'production') {

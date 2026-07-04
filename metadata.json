@@ -1,6 +1,6 @@
 {
-  "name": "Gestão de Representação Comercial",
-  "description": "Sistema completo para gestão de representação comercial. Controle faturamentos, gerencie carteiras de clientes e representadas, acompanhe metas mensais e utilize IA para redigir propostas e cobrar comissões em português.",
+  "name": "RepresentaPRO Portal Comercial",
+  "description": "Sistema completo para gestão de representação comercial multiempresas. Controle faturamentos, gerencie carteiras de clientes e representadas, acompanhe metas mensais e utilize IA para redigir propostas e cobrar comissões.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

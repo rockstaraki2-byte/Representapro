@@ -1,0 +1,320 @@
+import { initializeApp } from 'firebase/app';
+import { 
+  getFirestore, 
+  collection, 
+  doc, 
+  getDocs, 
+  setDoc, 
+  deleteDoc, 
+  writeBatch 
+} from 'firebase/firestore';
+import { 
+  Representada, 
+  Cliente, 
+  Pedido, 
+  Produto, 
+  EmpresaRepresentacao, 
+  Usuario, 
+  MetaVendas 
+} from './types';
+import { 
+  SEED_REPRESENTADAS, 
+  SEED_CLIENTES, 
+  SEED_PEDIDOS, 
+  SEED_PRODUTOS, 
+  SEED_EMPRESAS, 
+  SEED_USUARIOS, 
+  SEED_METAS 
+} from './data';
+import firebaseConfig from '../firebase-applet-config.json';
+
+// Use environment variables if set, otherwise fallback to the default applet config
+const env = (import.meta as any).env || {};
+const finalFirebaseConfig = env.VITE_FIREBASE_API_KEY 
+  ? {
+      apiKey: env.VITE_FIREBASE_API_KEY,
+      authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
+      projectId: env.VITE_FIREBASE_PROJECT_ID,
+      storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
+      messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+      appId: env.VITE_FIREBASE_APP_ID,
+      firestoreDatabaseId: env.VITE_FIREBASE_DATABASE_ID || '(default)'
+    }
+  : firebaseConfig;
+
+// Initialize Firebase
+const app = initializeApp(finalFirebaseConfig);
+export const db = getFirestore(app, finalFirebaseConfig.firestoreDatabaseId);
+
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+  };
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: null,
+      email: null,
+      emailVerified: null,
+      isAnonymous: null
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+// --- Data Seeding Function ---
+export async function seedDatabaseIfNeeded() {
+  try {
+    // Check if companies exist
+    const empresasSnap = await getDocs(collection(db, 'empresas'));
+    if (empresasSnap.empty) {
+      console.log('Seeding initial data to Firestore...');
+      
+      const batch = writeBatch(db);
+
+      // Seed Empresas
+      SEED_EMPRESAS.forEach(emp => {
+        batch.set(doc(db, 'empresas', emp.id), emp);
+      });
+
+      // Seed Usuarios
+      SEED_USUARIOS.forEach(usr => {
+        batch.set(doc(db, 'usuarios', usr.id), usr);
+      });
+
+      // Seed Representadas
+      SEED_REPRESENTADAS.forEach(rep => {
+        batch.set(doc(db, 'representadas', rep.id), rep);
+      });
+
+      // Seed Clientes
+      SEED_CLIENTES.forEach(cli => {
+        batch.set(doc(db, 'clientes', cli.id), cli);
+      });
+
+      // Seed Produtos
+      SEED_PRODUTOS.forEach(prod => {
+        batch.set(doc(db, 'produtos', prod.id), prod);
+      });
+
+      // Seed Pedidos
+      SEED_PEDIDOS.forEach(ped => {
+        batch.set(doc(db, 'pedidos', ped.id), ped);
+      });
+
+      // Seed Meta
+      // Meta is a special single-document or collection. Let's seed a default document.
+      batch.set(doc(db, 'meta', 'meta-global'), SEED_METAS);
+
+      await batch.commit();
+      console.log('Database seeded successfully!');
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, 'all-seeding');
+  }
+}
+
+// --- Representadas API ---
+export async function getRepresentadas(): Promise<Representada[]> {
+  try {
+    const snap = await getDocs(collection(db, 'representadas'));
+    return snap.docs.map(doc => doc.data() as Representada);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, 'representadas');
+    return [];
+  }
+}
+
+export async function saveRepresentada(rep: Representada): Promise<void> {
+  try {
+    await setDoc(doc(db, 'representadas', rep.id), rep);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `representadas/${rep.id}`);
+  }
+}
+
+export async function deleteRepresentada(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'representadas', id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `representadas/${id}`);
+  }
+}
+
+// --- Clientes API ---
+export async function getClientes(): Promise<Cliente[]> {
+  try {
+    const snap = await getDocs(collection(db, 'clientes'));
+    return snap.docs.map(doc => doc.data() as Cliente);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, 'clientes');
+    return [];
+  }
+}
+
+export async function saveCliente(cli: Cliente): Promise<void> {
+  try {
+    await setDoc(doc(db, 'clientes', cli.id), cli);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `clientes/${cli.id}`);
+  }
+}
+
+export async function deleteCliente(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'clientes', id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `clientes/${id}`);
+  }
+}
+
+// --- Pedidos API ---
+export async function getPedidos(): Promise<Pedido[]> {
+  try {
+    const snap = await getDocs(collection(db, 'pedidos'));
+    return snap.docs.map(doc => doc.data() as Pedido);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, 'pedidos');
+    return [];
+  }
+}
+
+export async function savePedido(ped: Pedido): Promise<void> {
+  try {
+    await setDoc(doc(db, 'pedidos', ped.id), ped);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `pedidos/${ped.id}`);
+  }
+}
+
+export async function deletePedido(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'pedidos', id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `pedidos/${id}`);
+  }
+}
+
+// --- Produtos API ---
+export async function getProdutos(): Promise<Produto[]> {
+  try {
+    const snap = await getDocs(collection(db, 'produtos'));
+    return snap.docs.map(doc => doc.data() as Produto);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, 'produtos');
+    return [];
+  }
+}
+
+export async function saveProduto(prod: Produto): Promise<void> {
+  try {
+    await setDoc(doc(db, 'produtos', prod.id), prod);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `produtos/${prod.id}`);
+  }
+}
+
+export async function deleteProduto(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'produtos', id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `produtos/${id}`);
+  }
+}
+
+// --- Empresas API ---
+export async function getEmpresas(): Promise<EmpresaRepresentacao[]> {
+  try {
+    const snap = await getDocs(collection(db, 'empresas'));
+    return snap.docs.map(doc => doc.data() as EmpresaRepresentacao);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, 'empresas');
+    return [];
+  }
+}
+
+export async function saveEmpresa(emp: EmpresaRepresentacao): Promise<void> {
+  try {
+    await setDoc(doc(db, 'empresas', emp.id), emp);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `empresas/${emp.id}`);
+  }
+}
+
+export async function deleteEmpresa(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'empresas', id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `empresas/${id}`);
+  }
+}
+
+// --- Usuarios API ---
+export async function getUsuarios(): Promise<Usuario[]> {
+  try {
+    const snap = await getDocs(collection(db, 'usuarios'));
+    return snap.docs.map(doc => doc.data() as Usuario);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, 'usuarios');
+    return [];
+  }
+}
+
+export async function saveUsuario(usr: Usuario): Promise<void> {
+  try {
+    await setDoc(doc(db, 'usuarios', usr.id), usr);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `usuarios/${usr.id}`);
+  }
+}
+
+export async function deleteUsuario(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'usuarios', id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `usuarios/${id}`);
+  }
+}
+
+// --- Meta API ---
+export async function getMeta(): Promise<MetaVendas> {
+  try {
+    const snap = await getDocs(collection(db, 'meta'));
+    if (!snap.empty) {
+      return snap.docs[0].data() as MetaVendas;
+    }
+    return SEED_METAS;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, 'meta');
+    return SEED_METAS;
+  }
+}
+
+export async function saveMeta(metaVal: MetaVendas): Promise<void> {
+  try {
+    await setDoc(doc(db, 'meta', 'meta-global'), metaVal);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, 'meta/meta-global');
+  }
+}

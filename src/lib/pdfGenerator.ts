@@ -5,7 +5,12 @@ import { formatarMoeda, formatarData } from '../utils';
 /**
  * Generates a clean, professional vector-based PDF for a single sales order.
  */
-export function gerarPedidoPDF(pedido: Pedido, cliente?: Cliente, representada?: Representada) {
+export function gerarPedidoPDF(
+  pedido: Pedido, 
+  cliente?: Cliente, 
+  representada?: Representada,
+  empresaRepresentacao?: any
+) {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -22,23 +27,51 @@ export function gerarPedidoPDF(pedido: Pedido, cliente?: Cliente, representada?:
   doc.setFillColor(darkColor[0], darkColor[1], darkColor[2]);
   doc.rect(0, 0, 210, 40, 'F');
 
-  // App Logo/Badge (Simulated in drawing)
-  doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-  doc.rect(15, 12, 10, 10, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.text('R', 20, 19.5, { align: 'center' });
+  let headerTextOffset = 30;
 
-  // Header Text
+  // Draw logo of represented brand (Fábrica) if present
+  if (representada?.logoUrl && representada.logoUrl.startsWith('data:image/')) {
+    try {
+      // Draw logo in white card in header
+      doc.setFillColor(255, 255, 255);
+      doc.roundedRect(12, 6, 26, 26, 2, 2, 'F');
+      doc.addImage(representada.logoUrl, 'PNG', 14, 8, 22, 22);
+      headerTextOffset = 44;
+    } catch (err) {
+      console.error('Erro ao adicionar logo no PDF:', err);
+    }
+  } else {
+    // App Logo/Badge (Simulated in drawing)
+    doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.rect(15, 12, 10, 10, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.text('R', 20, 19.5, { align: 'center' });
+    headerTextOffset = 30;
+  }
+
+  // Header Text adaptive to company representation (Multi-company / multi-tenant)
+  const repName = empresaRepresentacao?.nomeFantasia || 'REPRESENTAÇÃO COMERCIAL';
+  const repRazao = empresaRepresentacao?.razaoSocial || 'Sistema Integrado RepresentaPRO';
+  const repCNPJ = empresaRepresentacao?.cnpj ? `CNPJ: ${empresaRepresentacao.cnpj}` : 'Cópia Digital de Pedido de Venda';
+
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.text('SISTEMA DE REPRESENTAÇÃO COMERCIAL', 30, 18);
-  doc.setFontSize(10);
+  doc.setFontSize(13);
+  doc.text(repName.toUpperCase(), headerTextOffset, 15);
+  doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
+  doc.setTextColor(190, 200, 210);
+  doc.text(repRazao, headerTextOffset, 21);
   doc.setTextColor(148, 163, 184); // light gray
-  doc.text('Cópia Digital de Pedido de Venda', 30, 24);
+  doc.text(repCNPJ, headerTextOffset, 27);
+  if (empresaRepresentacao?.telefone || empresaRepresentacao?.email) {
+    const contactInfo = [empresaRepresentacao.telefone, empresaRepresentacao.email].filter(Boolean).join(' | ');
+    doc.text(contactInfo, headerTextOffset, 32);
+  } else {
+    doc.text('Gerado através do RepresentaPRO', headerTextOffset, 32);
+  }
 
   // Order Title & ID
   doc.setFillColor(241, 245, 249);
@@ -354,7 +387,8 @@ export function gerarDashboardPDF(
   pedidos: Pedido[],
   clientes: Cliente[],
   representadas: Representada[],
-  filtros: { representadaId: string; clienteId: string; status: string; dataDe: string; dataAte: string }
+  filtros: { representadaId: string; clienteId: string; status: string; dataDe: string; dataAte: string },
+  empresaRepresentacao?: any
 ) {
   const doc = new jsPDF({
     orientation: 'portrait',
@@ -398,22 +432,29 @@ export function gerarDashboardPDF(
   // Title
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(15);
-  doc.text('RELATÓRIO DE DESEMPENHO E MÉTRICAS', 15, 15);
-  doc.setFontSize(9);
+  doc.setFontSize(13);
+  
+  const repName = empresaRepresentacao?.nomeFantasia || 'PAINEL DE REPRESENTAÇÃO COMERCIAL';
+  const repDetails = empresaRepresentacao?.razaoSocial 
+    ? `${empresaRepresentacao.razaoSocial} | CNPJ: ${empresaRepresentacao.cnpj}`
+    : 'Relatório Executivo de Desempenho e Métricas';
+
+  doc.text(repName.toUpperCase(), 15, 13);
+  doc.setFontSize(8.5);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(148, 163, 184);
-  doc.text('Painel Executivo Geral com Filtros Aplicados', 15, 22);
+  doc.setTextColor(190, 200, 210);
+  doc.text(repDetails, 15, 19);
 
   // Filter labels
-  let filterText = 'Filtros: ';
+  let filterText = 'Filtros aplicados: ';
   const repSelected = representadas.find(r => r.id === filtros.representadaId);
   const cliSelected = clientes.find(c => c.id === filtros.clienteId);
   filterText += `Fábrica: ${repSelected ? repSelected.nomeFantasia : 'Todas'} | `;
   filterText += `Cliente: ${cliSelected ? cliSelected.nomeFantasia : 'Todos'} | `;
   filterText += `Status: ${filtros.status || 'Todos'}`;
   doc.setFontSize(7.5);
-  doc.text(filterText, 15, 28);
+  doc.setTextColor(148, 163, 184);
+  doc.text(filterText, 15, 26);
 
   // Quick stats panels (4 cols)
   const colW = 42;

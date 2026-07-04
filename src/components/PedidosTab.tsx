@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Pedido, Cliente, Representada, OrderItem, PedidoStatus } from '../types';
 import { formatarMoeda, formatarData } from '../utils';
-import { Plus, Trash2, Edit3, Eye, FileText, Check, Percent, AlertCircle, ShoppingCart, Mail, Send, Printer, Loader2, Download } from 'lucide-react';
+import { Plus, Trash2, Edit3, Eye, FileText, Check, Percent, AlertCircle, ShoppingCart, Mail, Send, Printer, Loader2, Download, MessageCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { gerarPedidoPDF, gerarResumoMensalPDF } from '../lib/pdfGenerator';
 
@@ -14,6 +14,7 @@ interface PedidosTabProps {
   onAdd: (pedido: Pedido) => void;
   onEdit: (pedido: Pedido) => void;
   onDelete: (id: string) => void;
+  empresaRepresentacao?: any;
 }
 
 export default function PedidosTab({
@@ -25,6 +26,7 @@ export default function PedidosTab({
   onAdd,
   onEdit,
   onDelete,
+  empresaRepresentacao,
 }: PedidosTabProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   
@@ -148,16 +150,57 @@ export default function PedidosTab({
     setEmailSuccess(false);
   };
 
-  const handleSendEmail = (e: React.FormEvent) => {
+  const handleSendWhatsApp = (p: Pedido) => {
+    const cli = clientes.find(c => c.id === p.clienteId);
+    const rep = representadas.find(r => r.id === p.representadaId);
+    
+    const formattedDate = formatarData(p.dataPedido);
+    const totalVal = formatarMoeda(p.valorTotal);
+    
+    const itemsList = p.itens.map(it => `- ${it.descricao}: ${it.quantidade}x ${formatarMoeda(it.precoUnitario)}`).join('\n');
+    
+    const text = `Olá, *${cli?.contato || 'Cliente'}*!\n\nSegue o resumo do seu *Pedido #${p.numeroPedido}* em parceria com a fábrica *${rep?.nomeFantasia || 'Representada'}*:\n\n*Data do Pedido:* ${formattedDate}\n*Status:* ${p.status}\n\n*Itens do Pedido:*\n${itemsList}\n\n*Valor Total do Pedido:* *${totalVal}*\n\nSe tiver qualquer dúvida, estou à disposição.\nAtenciosamente,\nRepresentação Comercial`;
+    
+    const phone = cli?.telefone ? cli.telefone.replace(/\D/g, '') : '';
+    let formattedPhone = phone;
+    if (phone && phone.length <= 11) {
+      formattedPhone = `55${phone}`;
+    }
+    
+    const url = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+  };
+
+  const handleSendEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSendingEmail(true);
-    setTimeout(() => {
-      setIsSendingEmail(false);
+    try {
+      const response = await fetch('/api/email/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: emailRecipient,
+          subject: emailSubject,
+          body: emailBody,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha ao enviar e-mail através do servidor.');
+      }
+
       setEmailSuccess(true);
       setTimeout(() => {
         setEmailPedido(null);
-      }, 1500);
-    }, 1500);
+      }, 1800);
+    } catch (err: any) {
+      console.error(err);
+      alert('Erro ao enviar e-mail: ' + (err.message || 'Tente novamente.'));
+    } finally {
+      setIsSendingEmail(false);
+    }
   };
 
   const handleSubmitPedido = (e: React.FormEvent) => {
@@ -623,7 +666,7 @@ export default function PedidosTab({
                           onClick={() => {
                             const cli = clientes.find(c => c.id === p.clienteId);
                             const rep = representadas.find(r => r.id === p.representadaId);
-                            gerarPedidoPDF(p, cli, rep);
+                            gerarPedidoPDF(p, cli, rep, empresaRepresentacao);
                           }}
                           className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-slate-50 rounded transition-colors cursor-pointer"
                           title="Imprimir Pedido (PDF)"
@@ -636,6 +679,13 @@ export default function PedidosTab({
                           title="Enviar por E-mail"
                         >
                           <Mail className="w-3.5 h-3.5" />
+                        </button>
+                        <button 
+                          onClick={() => handleSendWhatsApp(p)}
+                          className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-slate-50 rounded transition-colors cursor-pointer"
+                          title="Enviar via WhatsApp"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
                         </button>
                         <button 
                           onClick={() => handleLoadForEdit(p)}
