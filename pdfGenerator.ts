@@ -152,7 +152,10 @@ export function gerarPedidoPDF(
 
     doc.setFontSize(8);
     // Safe truncation to prevent overlapping with next columns
-    const displayDesc = item.descricao.length > 55 ? item.descricao.substring(0, 52) + '...' : item.descricao;
+    let fullDesc = item.descricao;
+    if (item.cor) fullDesc += ` | Cor: ${item.cor}`;
+    if (item.variacao) fullDesc += ` | Var: ${item.variacao}`;
+    const displayDesc = fullDesc.length > 55 ? fullDesc.substring(0, 52) + '...' : fullDesc;
     doc.text(displayDesc, 20, y + 5.5);
     doc.text(String(item.quantidade), 120, y + 5.5, { align: 'center' });
     doc.text(formatarMoeda(item.precoUnitario), 150, y + 5.5, { align: 'right' });

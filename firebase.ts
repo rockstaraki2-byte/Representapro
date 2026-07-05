@@ -58,6 +58,16 @@ export enum OperationType {
   WRITE = 'write',
 }
 
+function removeUndefinedFields<T extends Record<string, any>>(obj: T): T {
+  const newObj = { ...obj };
+  Object.keys(newObj).forEach((key) => {
+    if (newObj[key] === undefined) {
+      delete newObj[key];
+    }
+  });
+  return newObj;
+}
+
 interface FirestoreErrorInfo {
   error: string;
   operationType: OperationType;
@@ -151,7 +161,7 @@ export async function getRepresentadas(): Promise<Representada[]> {
 
 export async function saveRepresentada(rep: Representada): Promise<void> {
   try {
-    await setDoc(doc(db, 'representadas', rep.id), rep);
+    await setDoc(doc(db, 'representadas', rep.id), removeUndefinedFields(rep));
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `representadas/${rep.id}`);
   }
@@ -178,7 +188,7 @@ export async function getClientes(): Promise<Cliente[]> {
 
 export async function saveCliente(cli: Cliente): Promise<void> {
   try {
-    await setDoc(doc(db, 'clientes', cli.id), cli);
+    await setDoc(doc(db, 'clientes', cli.id), removeUndefinedFields(cli));
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `clientes/${cli.id}`);
   }
@@ -205,7 +215,7 @@ export async function getPedidos(): Promise<Pedido[]> {
 
 export async function savePedido(ped: Pedido): Promise<void> {
   try {
-    await setDoc(doc(db, 'pedidos', ped.id), ped);
+    await setDoc(doc(db, 'pedidos', ped.id), removeUndefinedFields(ped));
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `pedidos/${ped.id}`);
   }
@@ -232,7 +242,7 @@ export async function getProdutos(): Promise<Produto[]> {
 
 export async function saveProduto(prod: Produto): Promise<void> {
   try {
-    await setDoc(doc(db, 'produtos', prod.id), prod);
+    await setDoc(doc(db, 'produtos', prod.id), removeUndefinedFields(prod));
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `produtos/${prod.id}`);
   }
@@ -259,7 +269,7 @@ export async function getEmpresas(): Promise<EmpresaRepresentacao[]> {
 
 export async function saveEmpresa(emp: EmpresaRepresentacao): Promise<void> {
   try {
-    await setDoc(doc(db, 'empresas', emp.id), emp);
+    await setDoc(doc(db, 'empresas', emp.id), removeUndefinedFields(emp));
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `empresas/${emp.id}`);
   }
@@ -347,7 +357,7 @@ export async function saveUsuario(usr: Usuario): Promise<void> {
       };
       delete cleanUser.empresaRepresentacaoId;
     }
-    await setDoc(doc(db, 'usuarios', cleanUser.id), cleanUser);
+    await setDoc(doc(db, 'usuarios', cleanUser.id), removeUndefinedFields(cleanUser));
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `usuarios/${usr.id}`);
   }
@@ -377,7 +387,7 @@ export async function getMeta(): Promise<MetaVendas> {
 
 export async function saveMeta(metaVal: MetaVendas): Promise<void> {
   try {
-    await setDoc(doc(db, 'meta', 'meta-global'), metaVal);
+    await setDoc(doc(db, 'meta', 'meta-global'), removeUndefinedFields(metaVal));
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, 'meta/meta-global');
   }

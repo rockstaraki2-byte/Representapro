@@ -32,6 +32,8 @@ export interface OrderItem {
   quantidade: number;
   precoUnitario: number;
   totalItem: number;
+  cor?: string;
+  variacao?: string;
 }
 
 export type PedidoStatus = 'Rascunho' | 'Pendente' | 'Faturado' | 'Pago' | 'Cancelado';
@@ -64,12 +66,14 @@ export interface Produto {
   id: string;
   codigo: string;         // SKU ou Código interno
   nome: string;           // Nome do produto
-  representadaId: string; // ID da representada fabricante
+  representadaId?: string; // ID da representada fabricante (opcional)
   precoVenda: number;     // Preço sugerido de venda
   unidade: string;        // Unidade (Un, Cx, Kg, FD, etc.)
   descricao?: string;     // Detalhes ou especificações
   ativo: boolean;         // Se o produto está disponível para venda
   empresaRepresentacaoId?: string; // Multi-tenant link
+  cor?: string;           // Opções de cor
+  variacao?: string;      // Variações/Tamanho
 }
 
 // User role access levels

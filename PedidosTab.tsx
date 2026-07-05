@@ -140,8 +140,11 @@ export default function PedidosTab({
   // Item form states
   const [selectedProdutoId, setSelectedProdutoId] = useState('');
   const [itemDescricao, setItemDescricao] = useState('');
+  const [itemCor, setItemCor] = useState('');
+  const [itemVariacao, setItemVariacao] = useState('');
   const [itemQuantidade, setItemQuantidade] = useState<number>(1);
   const [itemPreco, setItemPreco] = useState<number>(0);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
 
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -248,19 +251,45 @@ export default function PedidosTab({
       return;
     }
 
-    const novoItem: OrderItem = {
-      id: `item-${Date.now()}-${Math.random().toString(36).substring(5)}`,
-      descricao: itemDescricao.trim(),
-      quantidade: itemQuantidade,
-      precoUnitario: itemPreco,
-      totalItem: itemQuantidade * itemPreco
-    };
+    if (editingItemId) {
+      setItens(itens.map(it => it.id === editingItemId ? {
+        ...it,
+        descricao: itemDescricao.trim(),
+        cor: itemCor.trim() || undefined,
+        variacao: itemVariacao.trim() || undefined,
+        quantidade: itemQuantidade,
+        precoUnitario: itemPreco,
+        totalItem: itemQuantidade * itemPreco
+      } : it));
+    } else {
+      const novoItem: OrderItem = {
+        id: `item-${Date.now()}-${Math.random().toString(36).substring(5)}`,
+        descricao: itemDescricao.trim(),
+        cor: itemCor.trim() || undefined,
+        variacao: itemVariacao.trim() || undefined,
+        quantidade: itemQuantidade,
+        precoUnitario: itemPreco,
+        totalItem: itemQuantidade * itemPreco
+      };
+      setItens([...itens, novoItem]);
+    }
 
-    setItens([...itens, novoItem]);
     setSelectedProdutoId('');
     setItemDescricao('');
+    setItemCor('');
+    setItemVariacao('');
     setItemQuantidade(1);
     setItemPreco(0);
+    setEditingItemId(null);
+  };
+
+  const handleEditItemInit = (item: OrderItem) => {
+    setEditingItemId(item.id);
+    setItemDescricao(item.descricao);
+    setItemCor(item.cor || '');
+    setItemVariacao(item.variacao || '');
+    setItemQuantidade(item.quantidade);
+    setItemPreco(item.precoUnitario);
   };
 
   const handleRemoveItem = (id: string) => {
@@ -301,10 +330,18 @@ export default function PedidosTab({
   const handleOpenEmailModal = (p: Pedido) => {
     const cli = clientes.find(c => c.id === p.clienteId);
     const rep = representadas.find(r => r.id === p.representadaId);
+    
+    const itemsList = p.itens.map(it => {
+      let desc = `- ${it.descricao}: ${it.quantidade}x ${formatarMoeda(it.precoUnitario)}`;
+      if (it.cor) desc += ` | Cor: ${it.cor}`;
+      if (it.variacao) desc += ` | Var: ${it.variacao}`;
+      return desc;
+    }).join('\n');
+    
     setEmailPedido(p);
     setEmailRecipient(cli?.email || '');
     setEmailSubject(`Pedido de Venda #${p.numeroPedido} - ${rep?.nomeFantasia || 'Representada'}`);
-    setEmailBody(`Prezado(a) ${cli?.contato || 'Cliente'},\n\nSegue em anexo a cópia digital do Pedido de Venda #${p.numeroPedido}.\n\nResumo Financeiro:\nValor Total: ${formatarMoeda(p.valorTotal)}\n\nQualquer dúvida, estamos à disposição.\n\nAtenciosamente,\nRepresentação Comercial`);
+    setEmailBody(`Prezado(a) ${cli?.contato || 'Cliente'},\n\nSegue em anexo a cópia digital do Pedido de Venda #${p.numeroPedido}.\n\n*Itens do Pedido:*\n${itemsList}\n\nResumo Financeiro:\nValor Total: ${formatarMoeda(p.valorTotal)}\n\nQualquer dúvida, estamos à disposição.\n\nAtenciosamente,\nRepresentação Comercial`);
     setEmailSuccess(false);
   };
 
@@ -315,7 +352,12 @@ export default function PedidosTab({
     const formattedDate = formatarData(p.dataPedido);
     const totalVal = formatarMoeda(p.valorTotal);
     
-    const itemsList = p.itens.map(it => `- ${it.descricao}: ${it.quantidade}x ${formatarMoeda(it.precoUnitario)}`).join('\n');
+    const itemsList = p.itens.map(it => {
+      let desc = `- ${it.descricao}: ${it.quantidade}x ${formatarMoeda(it.precoUnitario)}`;
+      if (it.cor) desc += ` | Cor: ${it.cor}`;
+      if (it.variacao) desc += ` | Var: ${it.variacao}`;
+      return desc;
+    }).join('\n');
     
     const text = `Olá, *${cli?.contato || 'Cliente'}*!\n\nSegue o resumo do seu *Pedido #${p.numeroPedido}* em parceria com a fábrica *${rep?.nomeFantasia || 'Representada'}*:\n\n*Data do Pedido:* ${formattedDate}\n*Status:* ${p.status}\n\n*Itens do Pedido:*\n${itemsList}\n\n*Valor Total do Pedido:* *${totalVal}*\n\nSe tiver qualquer dúvida, estou à disposição.\nAtenciosamente,\nRepresentação Comercial`;
     
@@ -677,24 +719,42 @@ export default function PedidosTab({
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                              {itens.map(it => (
-                                <tr key={it.id} className="hover:bg-slate-50/60 transition-colors">
-                                  <td className="p-2.5 pl-3 font-serif text-slate-700 font-bold">{it.descricao}</td>
-                                  <td className="p-2.5 text-center font-mono font-bold text-slate-600">{it.quantidade}</td>
-                                  <td className="p-2.5 text-right font-mono text-slate-600">{formatarMoeda(it.precoUnitario)}</td>
-                                  <td className="p-2.5 text-right font-mono text-slate-700 font-bold">{formatarMoeda(it.totalItem)}</td>
-                                  <td className="p-2.5 text-center">
-                                    <button 
-                                      type="button"
-                                      onClick={() => handleRemoveItem(it.id)}
-                                      className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 cursor-pointer"
-                                      title="Remover Item"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
+                                {itens.map(it => (
+                                  <tr key={it.id} className="hover:bg-slate-50/60 transition-colors">
+                                    <td className="p-2.5 pl-3">
+                                      <div className="font-serif text-slate-700 font-bold">{it.descricao}</div>
+                                      {(it.cor || it.variacao) && (
+                                        <div className="flex gap-1.5 mt-0.5 text-[9px] font-mono text-slate-500">
+                                          {it.cor && <span>Cor: {it.cor}</span>}
+                                          {it.variacao && <span>Var: {it.variacao}</span>}
+                                        </div>
+                                      )}
+                                    </td>
+                                    <td className="p-2.5 text-center font-mono font-bold text-slate-600">{it.quantidade}</td>
+                                    <td className="p-2.5 text-right font-mono text-slate-600">{formatarMoeda(it.precoUnitario)}</td>
+                                    <td className="p-2.5 text-right font-mono text-slate-700 font-bold">{formatarMoeda(it.totalItem)}</td>
+                                    <td className="p-2.5 text-center">
+                                      <div className="flex items-center justify-center gap-1">
+                                        <button 
+                                          type="button"
+                                          onClick={() => handleEditItemInit(it)}
+                                          className="text-emerald-600 hover:text-emerald-700 p-1 rounded hover:bg-emerald-50 cursor-pointer"
+                                          title="Editar Item"
+                                        >
+                                          <Edit3 className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button 
+                                          type="button"
+                                          onClick={() => handleRemoveItem(it.id)}
+                                          className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 cursor-pointer"
+                                          title="Remover Item"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
                             </tbody>
                           </table>
                         )}
@@ -726,11 +786,37 @@ export default function PedidosTab({
                               if (prod) {
                                 setItemDescricao(prod.nome);
                                 setItemPreco(prod.precoVenda);
+                                setItemCor(prod.cor || '');
+                                setItemVariacao(prod.variacao || '');
                               }
                             }}
                             placeholder={representadaId ? "Buscar produto..." : "Selecione representada primeiro"}
                             disabled={!representadaId}
                           />
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div className="space-y-1 sm:col-span-1">
+                            <label className="block text-[10px] font-mono uppercase text-slate-500">Cor</label>
+                            <input 
+                              type="text"
+                              placeholder="Opcional"
+                              value={itemCor}
+                              onChange={(e) => setItemCor(e.target.value)}
+                              className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-emerald-600 font-mono"
+                            />
+                          </div>
+                          
+                          <div className="space-y-1 sm:col-span-2">
+                            <label className="block text-[10px] font-mono uppercase text-slate-500">Variação / Tamanho</label>
+                            <input 
+                              type="text"
+                              placeholder="Opcional"
+                              value={itemVariacao}
+                              onChange={(e) => setItemVariacao(e.target.value)}
+                              className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-emerald-600 font-mono"
+                            />
+                          </div>
                         </div>
 
                         <div className="space-y-1">
@@ -774,7 +860,7 @@ export default function PedidosTab({
                           className="w-full bg-slate-800 hover:bg-slate-900 text-white py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          <span>Adicionar ao Carrinho</span>
+                          <span>{editingItemId ? 'Atualizar Item' : 'Adicionar ao Carrinho'}</span>
                         </button>
                       </form>
                     </div>
@@ -1022,9 +1108,17 @@ export default function PedidosTab({
                     <span className="text-[10px] uppercase font-mono tracking-wider text-slate-400 block mb-1.5">Itens do Pedido ({p.itens.length})</span>
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                       {p.itens.map(it => (
-                        <div key={it.id} className="bg-slate-50/50 p-2 rounded-lg border border-slate-100 text-[11px] flex justify-between items-center">
-                          <span className="font-serif text-slate-700 font-bold overflow-hidden text-ellipsis whitespace-nowrap max-w-[130px]">{it.descricao}</span>
-                          <span className="font-mono text-slate-500 font-bold shrink-0">{it.quantidade}x {formatarMoeda(it.precoUnitario)}</span>
+                        <div key={it.id} className="bg-slate-50/50 p-2 rounded-lg border border-slate-100 flex justify-between items-center text-[11px]">
+                          <div className="flex flex-col min-w-0">
+                            <span className="font-serif text-slate-700 font-bold overflow-hidden text-ellipsis whitespace-nowrap">{it.descricao}</span>
+                            {(it.cor || it.variacao) && (
+                              <div className="flex gap-1 mt-0.5 text-[9px] font-mono text-slate-500">
+                                {it.cor && <span>Cor: {it.cor}</span>}
+                                {it.variacao && <span>Var: {it.variacao}</span>}
+                              </div>
+                            )}
+                          </div>
+                          <span className="font-mono text-slate-500 font-bold shrink-0 text-right">{it.quantidade}x {formatarMoeda(it.precoUnitario)}</span>
                         </div>
                       ))}
                     </div>

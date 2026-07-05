@@ -164,7 +164,7 @@ export default function App() {
   });
 
   useEffect(() => {
-    localStorage.setItem('rep_notifications', JSON.stringify(notifications));
+    try { localStorage.setItem('rep_notifications', JSON.stringify(notifications)); } catch(e) { console.error('rep_notifications', e); }
   }, [notifications]);
 
   const triggerAppNotification = (title: string, message: string, type: 'order' | 'commission') => {
@@ -220,27 +220,27 @@ export default function App() {
 
   // --- LocalStorage Synchronization ---
   useEffect(() => {
-    localStorage.setItem('rep_representadas', JSON.stringify(representadas));
+    try { localStorage.setItem('rep_representadas', JSON.stringify(representadas)); } catch(e) { console.error('rep_representadas', e); }
   }, [representadas]);
 
   useEffect(() => {
-    localStorage.setItem('rep_clientes', JSON.stringify(clientes));
+    try { localStorage.setItem('rep_clientes', JSON.stringify(clientes)); } catch(e) { console.error('rep_clientes', e); }
   }, [clientes]);
 
   useEffect(() => {
-    localStorage.setItem('rep_pedidos', JSON.stringify(pedidos));
+    try { localStorage.setItem('rep_pedidos', JSON.stringify(pedidos)); } catch(e) { console.error('rep_pedidos', e); }
   }, [pedidos]);
 
   useEffect(() => {
-    localStorage.setItem('rep_meta', JSON.stringify(meta));
+    try { localStorage.setItem('rep_meta', JSON.stringify(meta)); } catch(e) { console.error('rep_meta', e); }
   }, [meta]);
 
   useEffect(() => {
-    localStorage.setItem('rep_produtos', JSON.stringify(produtos));
+    try { localStorage.setItem('rep_produtos', JSON.stringify(produtos)); } catch(e) { console.error('rep_produtos', e); }
   }, [produtos]);
 
   useEffect(() => {
-    localStorage.setItem('rep_empresas', JSON.stringify(empresas));
+    try { localStorage.setItem('rep_empresas', JSON.stringify(empresas)); } catch(e) { console.error('rep_empresas', e); }
   }, [empresas]);
 
   useEffect(() => {
@@ -248,7 +248,7 @@ export default function App() {
   }, [activeEmpresaId]);
 
   useEffect(() => {
-    localStorage.setItem('rep_usuarios', JSON.stringify(usuarios));
+    try { try { localStorage.setItem('rep_usuarios', JSON.stringify(usuarios)); } catch(e) { console.error('rep_usuarios', e); } } catch(e) { console.error("usuarios", e); }
   }, [usuarios]);
 
   useEffect(() => {

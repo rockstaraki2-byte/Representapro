@@ -72,8 +72,8 @@ export default function ProdutosTab({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!form.codigo?.trim() || !form.nome?.trim() || !form.representadaId || form.precoVenda === undefined) {
-      setValidationError('Por favor, preencha os campos obrigatórios (Código, Nome, Representada e Preço de Venda).');
+    if (!form.codigo?.trim() || !form.nome?.trim() || form.precoVenda === undefined) {
+      setValidationError('Por favor, preencha os campos obrigatórios (Código, Nome, e Preço de Venda).');
       return;
     }
 
@@ -86,11 +86,13 @@ export default function ProdutosTab({
       id: editingId || `prod-${Date.now()}`,
       codigo: form.codigo.trim().toUpperCase(),
       nome: form.nome.trim(),
-      representadaId: form.representadaId,
+      representadaId: form.representadaId || undefined,
       precoVenda: Number(form.precoVenda),
       unidade: form.unidade?.trim() || 'Un',
       descricao: form.descricao?.trim() || '',
       ativo: form.ativo !== false,
+      cor: form.cor?.trim(),
+      variacao: form.variacao?.trim(),
     };
 
     if (editingId) {
@@ -211,17 +213,41 @@ export default function ProdutosTab({
 
                     {/* Fábrica / Representada */}
                     <div className="space-y-1">
-                      <label className="block text-xs font-mono uppercase text-slate-500">Fábrica Representada <span className="text-red-500">*</span></label>
+                      <label className="block text-xs font-mono uppercase text-slate-500">Fábrica Representada (Opcional)</label>
                       <select
                         value={form.representadaId || ''}
                         onChange={(e) => setForm({ ...form, representadaId: e.target.value })}
                         className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-xs focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-800"
                       >
-                        <option value="">Selecione uma Fábrica...</option>
+                        <option value="">Selecione uma Fábrica (Opcional)</option>
                         {representadas.map(rep => (
                           <option key={rep.id} value={rep.id}>{rep.nomeFantasia}</option>
                         ))}
                       </select>
+                    </div>
+
+                    {/* Cor */}
+                    <div className="space-y-1">
+                      <label className="block text-xs font-mono uppercase text-slate-500">Cores Disponíveis (Opcional)</label>
+                      <input 
+                        type="text"
+                        placeholder="Ex: Azul, Verde, Preto"
+                        value={form.cor || ''}
+                        onChange={(e) => setForm({ ...form, cor: e.target.value })}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-xs focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-800"
+                      />
+                    </div>
+
+                    {/* Variação/Tamanho */}
+                    <div className="space-y-1">
+                      <label className="block text-xs font-mono uppercase text-slate-500">Tamanhos/Variações (Opcional)</label>
+                      <input 
+                        type="text"
+                        placeholder="Ex: P, M, G, GG ou 38, 40, 42"
+                        value={form.variacao || ''}
+                        onChange={(e) => setForm({ ...form, variacao: e.target.value })}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-xs focus:outline-none focus:border-emerald-600 focus:bg-white text-slate-800"
+                      />
                     </div>
 
                     {/* Preço de Venda */}
@@ -404,8 +430,16 @@ export default function ProdutosTab({
                       <h5 className="font-serif font-bold text-sm text-slate-900 leading-snug">{prod.nome}</h5>
                       <div className="flex items-center gap-1 mt-1 text-slate-500 text-xs">
                         <Building2 className="w-3 h-3 text-slate-400 shrink-0" />
-                        <span className="truncate">Fábrica: <strong>{rep ? rep.nomeFantasia : 'Não localizada'}</strong></span>
+                        <span className="truncate">Fábrica: <strong>{rep ? rep.nomeFantasia : 'N/A'}</strong></span>
                       </div>
+                      
+                      {(prod.cor || prod.variacao) && (
+                        <div className="flex gap-2 mt-1.5 text-[10px] font-mono text-slate-500">
+                          {prod.cor && <span className="bg-slate-100 px-1.5 py-0.5 rounded">Cores: {prod.cor}</span>}
+                          {prod.variacao && <span className="bg-slate-100 px-1.5 py-0.5 rounded">Vars: {prod.variacao}</span>}
+                        </div>
+                      )}
+                      
                       {prod.descricao && (
                         <p className="text-slate-400 text-[11px] mt-1 line-clamp-2 italic leading-relaxed">
                           "{prod.descricao}"
