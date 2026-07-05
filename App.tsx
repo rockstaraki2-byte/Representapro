@@ -117,7 +117,12 @@ export default function App() {
 
   const [usuarios, setUsuarios] = useState<Usuario[]>(() => {
     const saved = localStorage.getItem('rep_usuarios');
-    return saved ? JSON.parse(saved) : SEED_USUARIOS;
+    const parsed = saved ? JSON.parse(saved) : SEED_USUARIOS;
+    const unique = new Map();
+    parsed.forEach((u: Usuario) => {
+      if (!unique.has(u.id)) unique.set(u.id, u);
+    });
+    return Array.from(unique.values());
   });
 
   const [currentUserId, setCurrentUserId] = useState<string>(() => {

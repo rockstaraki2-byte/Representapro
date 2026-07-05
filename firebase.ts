@@ -277,8 +277,10 @@ export async function deleteEmpresa(id: string): Promise<void> {
 export async function getUsuarios(): Promise<Usuario[]> {
   try {
     const snap = await getDocs(collection(db, 'usuarios'));
-    const list = snap.docs.map(doc => {
-      const u = doc.data() as Usuario;
+    const list = snap.docs.map(doc => doc.data() as Usuario);
+
+    // Normalize any "Raul" user to have 'usr-raul' id.
+    const normalizedList = list.map(u => {
       if (u.id === 'usr-raul' || u.nome?.toLowerCase() === 'raul' || u.email?.toLowerCase() === 'raul') {
         const cleaned: Usuario = {
           ...u,
@@ -296,7 +298,16 @@ export async function getUsuarios(): Promise<Usuario[]> {
       return u;
     });
 
-    const raulIdx = list.findIndex(u => u.id === 'usr-raul');
+    // Deduplicate by ID
+    const uniqueMap = new Map<string, Usuario>();
+    for (const u of normalizedList) {
+      if (!uniqueMap.has(u.id)) {
+        uniqueMap.set(u.id, u);
+      }
+    }
+    const deduplicatedList = Array.from(uniqueMap.values());
+
+    const raulIdx = deduplicatedList.findIndex(u => u.id === 'usr-raul');
     if (raulIdx === -1) {
       const raulUser: Usuario = {
         id: 'usr-raul',
@@ -308,13 +319,13 @@ export async function getUsuarios(): Promise<Usuario[]> {
       };
       // Use silent background save
       saveUsuario(raulUser).catch(err => console.warn("Erro ao salvar Raul no Firestore:", err));
-      list.push(raulUser);
+      deduplicatedList.push(raulUser);
     } else {
       // Correct existing Raul if it was misconfigured
-      const correctRaul = list[raulIdx];
+      const correctRaul = deduplicatedList[raulIdx];
       saveUsuario(correctRaul).catch(err => console.warn("Erro ao atualizar Raul no Firestore:", err));
     }
-    return list;
+    return deduplicatedList;
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, 'usuarios');
     return [];
